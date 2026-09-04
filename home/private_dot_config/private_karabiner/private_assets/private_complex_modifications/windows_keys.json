@@ -1,0 +1,64 @@
+{
+    "title": "Windows Home/End keys",
+    "rules": [
+        {
+            "description": "Windows style Home/End keys for specific apps",
+            "manipulators": [
+                {
+                    "description": "Home to Command+Left",
+                    "type": "basic",
+                    "from": {
+                        "key_code": "home",
+                        "modifiers": {
+                            "optional": ["any"]
+                        }
+                    },
+                    "to": [
+                        {
+                            "key_code": "left_arrow",
+                            "modifiers": ["command"]
+                        }
+                    ],
+                    "conditions": [
+                        {
+                            "type": "frontmost_application_if",
+                            "bundle_identifiers": [
+                                "^com\\.google\\.Chrome$",
+                                "^com\\.microsoft\\.VSCode$",
+                                "^com\\.slack\\.Slack$",
+                                "^com\\.apple\\.Terminal$"
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "description": "End to Command+Right",
+                    "type": "basic",
+                    "from": {
+                        "key_code": "end",
+                        "modifiers": {
+                            "optional": ["any"]
+                        }
+                    },
+                    "to": [
+                        {
+                            "key_code": "right_arrow",
+                            "modifiers": ["command"]
+                        }
+                    ],
+                    "conditions": [
+                        {
+                            "type": "frontmost_application_if",
+                            "bundle_identifiers": [
+                                "^com\\.google\\.Chrome$",
+                                "^com\\.microsoft\\.VSCode$",
+                                "^com\\.slack\\.Slack$",
+                                "^com\\.apple\\.Terminal$"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

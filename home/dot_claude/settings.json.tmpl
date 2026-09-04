@@ -1,0 +1,50 @@
+{
+  "model": "claude-fable-5-1[1m]",
+  "enabledPlugins": {{ .claudePlugins | toPrettyJson | indent 2 | trim }},
+  "extraKnownMarketplaces": {{ .claudeMarketplaces | toPrettyJson | indent 2 | trim }},
+  "skipWorkflowUsageWarning": true,
+  "theme": "auto",
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash {{ .chezmoi.homeDir }}/.claude/hooks/notify-when-quiet.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash {{ .chezmoi.homeDir }}/.claude/hooks/notify-when-quiet.sh",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash {{ .chezmoi.homeDir }}/.claude/hooks/notify-when-quiet.sh",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "sandbox": {
+    "filesystem": {
+      "allowWrite": [
+        "{{ .chezmoi.homeDir }}/workspace"
+      ]
+    }
+  }
+}

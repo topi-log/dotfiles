@@ -1,0 +1,18 @@
+# 認証トークンを含む。絶対に管理下に入れない。
+.config/gh/hosts.yml
+
+# Karabiner-Elements の自動生成バックアップ
+.config/karabiner/automatic_backups
+
+# wezterm リポジトリ時代の作業成果物
+.config/wezterm/docs
+.config/wezterm/.claude
+.config/wezterm/README.md
+
+# Claude Code のセッション作業ファイル（source 内に生成されることがある）
+.config/.claude
+.claude/.cc-writes
+
+# 外部からインポートした Karabiner のルールセット。出自とライセンスが
+# 不明なため public リポジトリでは再配布しない。
+.config/karabiner/assets/complex_modifications/1737014820.json

@@ -1,0 +1,8 @@
+.DS_Store
+
+# Claude Code のセッション作業ファイル
+.claude/
+
+# 設計 spec と実装計画。ローカルの絶対パスとユーザー名を含むため
+# public リポジトリには含めない。
+docs/superpowers/

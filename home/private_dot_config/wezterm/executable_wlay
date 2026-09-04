@@ -1,0 +1,19 @@
+#!/bin/bash
+# WezTerm overlay pane: split-pane + zoom-pane to cover the current pane
+# Auto-closes on program exit → unzoom → original pane restored
+
+set -euo pipefail
+
+if [ -z "${WEZTERM_PANE:-}" ]; then
+  echo "Error: not running inside WezTerm" >&2
+  exit 1
+fi
+
+case "${1:-sh}" in
+  sh)  set -- zsh ;;
+  nv)  shift; set -- nvim "$@" ;;
+  git) shift; set -- lazygit "$@" ;;
+esac
+
+pane_id=$(wezterm cli split-pane --bottom --cwd "$(pwd)" -- "$@")
+wezterm cli zoom-pane --zoom --pane-id "$pane_id"
