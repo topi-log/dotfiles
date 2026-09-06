@@ -1,0 +1,13 @@
+export PATH="$HOME/.local/bin:$PATH"
+
+autoload -Uz add-zsh-hook vcs_info
+
+zstyle ':vcs_info:git:*' formats ' (%F{green}%b%f)'
+setopt prompt_subst
+
+function update-vcs-info() {
+  vcs_info
+}
+add-zsh-hook precmd update-vcs-info
+
+PROMPT='%1~${vcs_info_msg_0_} %# '

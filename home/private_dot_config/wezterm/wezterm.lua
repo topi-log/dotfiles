@@ -1,88 +1,50 @@
--- Pull in the wezterm API
 local wezterm = require("wezterm")
-local config = wezterm.config_builder()
 local act = wezterm.action
+local config = wezterm.config_builder()
 
-config.automatically_reload_config = true
-config.hyperlink_rules = wezterm.default_hyperlink_rules()
-
--- start new windows / tabs in ~/workspace
 config.default_cwd = wezterm.home_dir .. "/workspace"
 
--- set leader
-config.leader = { key = "a", mods = "CTRL", timeout_milliseconds = 2001 }
-
--- font size
+-- Appearance
+config.font = wezterm.font("Hack Nerd Font", {
+	weight = "Regular",
+	stretch = "Normal",
+	style = "Normal",
+})
 config.font_size = 15.0
-config.font = wezterm.font("Hack Nerd Font", { weight = "Regular", stretch = "Normal", style = "Normal" })
-
--- right status
-wezterm.on("update-right-status", function(window)
-	window:set_right_status(window:active_workspace())
-end)
-
--- use jp lang
-config.use_ime = true
-
--- opacity
+config.color_scheme = "Ef-Night"
 config.window_background_opacity = 0.8
 config.macos_window_background_blur = 20
+config.window_decorations = "RESIZE"
 
--- color scheme
--- config.color_scheme = 'Aci (Gogh)'
--- config.color_scheme = 'Ef-Deuteranopia-Dark'
--- config.color_scheme = 'ENCOM'
-config.color_scheme = "Ef-Night"
--- config.color_scheme = 'Blue Matrix'
-
--- tab bar
 config.use_fancy_tab_bar = false
 config.tab_bar_at_bottom = false
-config.window_decorations = "RESIZE"
 config.show_new_tab_button_in_tab_bar = false
-config.tab_bar_at_bottom = false
 config.colors = {
 	tab_bar = {
+		background = wezterm.color.get_builtin_schemes()[config.color_scheme].background,
 		inactive_tab_edge = "none",
 	},
 }
 
 wezterm.on("format-tab-title", function(tab)
-		local scheme = wezterm.color.get_builtin_schemes()[config.color_scheme]
-		local background = scheme.background
-		local foreground = scheme.foreground
+	local scheme = wezterm.color.get_builtin_schemes()[config.color_scheme]
+	local foreground = tab.is_active and scheme.brights[8] or scheme.foreground
 
-		if tab.is_active then
-			foreground = scheme.brights[8]
-		end
+	return {
+		{ Background = { Color = scheme.background } },
+		{ Foreground = { Color = foreground } },
+	}
+end)
 
-		return {
-			{ Background = { Color = background } },
-			{ Foreground = { Color = foreground } },
-		}
-	end)
-
--- tab bar color asnc color_scheme
-config.colors = {
-	tab_bar = {
-		background = wezterm.color.get_builtin_schemes()[config.color_scheme].background,
-	},
-}
+-- Input
+config.use_ime = true
 
 config.keys = {
-	-- reload
-	{
-		key = "r",
-		mods = "CMD|SHIFT",
-		action = wezterm.action.ReloadConfiguration,
- },
-	-- close tab
 	{
 		key = "w",
 		mods = "CMD",
 		action = act.CloseCurrentPane({ confirm = true }),
 	},
-	-- pane split
 	{
 		key = ",",
 		mods = "CMD",
@@ -93,59 +55,19 @@ config.keys = {
 		mods = "CMD",
 		action = act({ SplitHorizontal = { domain = "CurrentPaneDomain" } }),
 	},
-	-- pane move (SHIFT + Arrow)
 	{
-		key = "LeftArrow",
+		key = "Enter",
 		mods = "SHIFT",
-		action = act.ActivatePaneDirection("Left"),
+		action = act.SendString("\n"),
 	},
-	{
-		key = "RightArrow",
-		mods = "SHIFT",
-		action = act.ActivatePaneDirection("Right"),
-	},
-	{
-		key = "UpArrow",
-		mods = "SHIFT",
-		action = act.ActivatePaneDirection("Up"),
-	},
-	{
-		key = "DownArrow",
-		mods = "SHIFT",
-		action = act.ActivatePaneDirection("Down"),
-	},
-	-- workspace (CMD + Left/Right)
-	{
-		key = "LeftArrow",
-		mods = "CMD",
-		action = act.SwitchWorkspaceRelative(-1),
-	},
-	{
-		key = "RightArrow",
-		mods = "CMD",
-		action = act.SwitchWorkspaceRelative(1),
-	},
-	{
-		key = "9",
-		mods = "ALT",
-		action = act.ShowLauncherArgs({
-			flags = "FUZZY|WORKSPACES",
-		}),
-	},
-	{ key = "Enter", mods = "SHIFT", action = act.SendString("\n") },
-  {
-    key = 'n',
-    mods = 'CTRL',
-    action = wezterm.action.TogglePaneZoomState,
-  },
 }
 
--- mouse selection
--- Plain left-drag selects & copies even while the running program has mouse
--- reporting enabled, as long as it is on the primary screen (Claude Code, shell).
--- Alt-screen apps (nvim, lazygit, fzf) keep receiving mouse events as before.
+-- Select and copy with the mouse even when an application enables mouse
+-- reporting on the primary screen. Alternate-screen applications keep their
+-- own mouse handling.
 local function selection_mouse_bindings()
 	local bindings = {}
+
 	for streak, mode in ipairs({ "Cell", "Word", "Line" }) do
 		table.insert(bindings, {
 			event = { Down = { streak = streak, button = "Left" } },
@@ -162,6 +84,7 @@ local function selection_mouse_bindings()
 			alt_screen = false,
 		})
 	end
+
 	table.insert(bindings, {
 		event = { Drag = { streak = 1, button = "Left" } },
 		mods = "NONE",
@@ -169,6 +92,7 @@ local function selection_mouse_bindings()
 		mouse_reporting = true,
 		alt_screen = false,
 	})
+
 	return bindings
 end
 

@@ -4,6 +4,11 @@
   "extraKnownMarketplaces": {{ .claudeMarketplaces | toPrettyJson | indent 2 | trim }},
   "skipWorkflowUsageWarning": true,
   "theme": "auto",
+  "statusLine": {
+    "type": "command",
+    "command": "bash {{ .chezmoi.homeDir }}/.claude/statusline.sh",
+    "refreshInterval": 5
+  },
   "hooks": {
     "PermissionRequest": [
       {

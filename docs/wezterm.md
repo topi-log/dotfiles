@@ -9,21 +9,16 @@ WezTerm terminal configuration for macOS.
 - **Translucent Background**: opacity 0.8 + blur 20
 - **Tab Bar**: Minimal style (matches color scheme)
 - **IME**: Enabled
-- **Leader Key**: `Ctrl+A`
 - **Default cwd**: `~/workspace`
 
 ### Key Bindings
 
 | Key | Action |
 |---|---|
-| `Cmd+Shift+R` | Reload config |
 | `Cmd+W` | Close pane |
 | `Cmd+,` | Split vertically |
 | `Cmd+.` | Split horizontally |
-| `Shift+Arrow` | Navigate panes |
-| `Cmd+Left/Right` | Switch workspace |
-| `Alt+9` | Workspace list (Fuzzy) |
-| `Ctrl+N` | Toggle pane zoom |
+| `Shift+Enter` | Send a newline |
 
 ### Mouse Selection
 

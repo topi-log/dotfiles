@@ -27,8 +27,11 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
 | `~/.config/gh/config.yml` | symlink |
+| `~/.zshrc` | symlink |
 | `~/.claude/settings.json` | 実ファイル（テンプレート） |
+| `~/.claude/CLAUDE.md` | symlink |
 | `~/.claude/hooks/notify-when-quiet.sh` | symlink |
+| `~/.claude/statusline.sh` | symlink |
 
 管理していないもの:
 
@@ -36,12 +39,12 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 - `~/.config/karabiner/automatic_backups/` — Karabiner-Elements の自動生成物
 - `~/.config/karabiner/assets/complex_modifications/1737014820.json` —
   外部からインポートしたルールセット。出自とライセンスが不明なため再配布しない
-- `~/.zshrc`、`~/.gitconfig` — 未着手。`chezmoi add` で追加できる
+- `~/.gitconfig` — 未着手。`chezmoi add` で追加できる
 
 ## セットアップ（新マシン）
 
 ```sh
-brew install chezmoi
+brew install chezmoi jq
 git clone git@github.com:topi-log/dotfiles.git ~/workspace/dotfiles
 ```
 
@@ -73,8 +76,8 @@ chezmoi diff                 # 何が変わるか必ず確認する
 chezmoi apply
 ```
 
-`wlay` を使うには PATH に `~/.config/scripts` を追加する。`~/.zshrc` は
-このリポジトリの管理対象外なので手で追記する。
+`wlay` を使うには PATH に `~/.config/scripts` を追加する。
+リポジトリ側の `home/dot_zshrc` を編集して `chezmoi apply` する。
 
 ```sh
 export PATH="$HOME/.config/scripts:$PATH"
@@ -134,3 +137,4 @@ source directory がこのリポジトリの場所を指しているため。切
 ## ドキュメント
 
 - [wezterm の設定と wlay](docs/wezterm.md)
+- [Claude Code グローバル指示の日本語訳](docs/claude-global-instructions.ja.md)
