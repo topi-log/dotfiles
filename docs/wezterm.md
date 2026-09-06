@@ -4,7 +4,7 @@ WezTerm terminal configuration for macOS.
 
 ## Overview
 
-- **Font**: Hack Nerd Font (15pt)
+- **Font**: HackGen Console (15pt)
 - **Color Scheme**: Ef-Night
 - **Translucent Background**: opacity 0.8 + blur 20
 - **Tab Bar**: Minimal style (matches color scheme)
@@ -15,6 +15,7 @@ WezTerm terminal configuration for macOS.
 
 | Key | Action |
 |---|---|
+| `Cmd+/` | Show the shortcut list |
 | `Cmd+Shift+Space` | Open the current directory in Visual Studio Code |
 | `Cmd+W` | Close pane |
 | `Cmd+,` | Split vertically |
@@ -33,7 +34,7 @@ Alt-screen apps (nvim, lazygit, fzf) keep receiving mouse events as before.
 
 ```bash
 brew install --cask wezterm
-brew install --cask font-hack-nerd-font
+brew install --cask font-hackgen
 ```
 
 ### 2. Deploy the config

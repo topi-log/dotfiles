@@ -5,7 +5,7 @@ local config = wezterm.config_builder()
 config.default_cwd = wezterm.home_dir .. "/workspace"
 
 -- Appearance
-config.font = wezterm.font("Hack Nerd Font", {
+config.font = wezterm.font("HackGen Console", {
 	weight = "Regular",
 	stretch = "Normal",
 	style = "Normal",
@@ -36,10 +36,32 @@ wezterm.on("format-tab-title", function(tab)
 	}
 end)
 
+wezterm.on("update-right-status", function(window)
+	window:set_right_status("Cmd+/  ヘルプ")
+end)
+
 -- Input
 config.use_ime = true
 
 config.keys = {
+	{
+		key = "/",
+		mods = "CMD",
+		action = act.InputSelector({
+			title = "WezTerm ショートカット",
+			description = "Escで閉じる",
+			choices = {
+				{ label = "Cmd+Shift+Space   現在のディレクトリをVS Codeで開く" },
+				{ label = "Cmd+W             現在のペインを閉じる" },
+				{ label = "Cmd+,             ペインを縦分割" },
+				{ label = "Cmd+.             ペインを横分割" },
+				{ label = "Shift+Enter       改行を送信" },
+				{ label = "Cmd+T             新しいタブを開く" },
+				{ label = "マウスドラッグ    テキストを選択してコピー" },
+			},
+			action = wezterm.action_callback(function() end),
+		}),
+	},
 	{
 		key = "Space",
 		mods = "CMD|SHIFT",
