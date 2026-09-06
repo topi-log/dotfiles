@@ -1,6 +1,5 @@
 #!/bin/bash
-# WezTerm overlay pane: split-pane + zoom-pane to cover the current pane
-# Auto-closes on program exit → unzoom → original pane restored
+# Open a temporary full-screen pane.
 
 set -euo pipefail
 
@@ -9,11 +8,19 @@ if [ -z "${WEZTERM_PANE:-}" ]; then
   exit 1
 fi
 
+if command -v wezterm >/dev/null 2>&1; then
+  WEZTERM_BIN=$(command -v wezterm)
+elif [ -x /Applications/WezTerm.app/Contents/MacOS/wezterm ]; then
+  WEZTERM_BIN=/Applications/WezTerm.app/Contents/MacOS/wezterm
+else
+  echo "Error: wezterm CLI not found" >&2
+  exit 1
+fi
+
 case "${1:-sh}" in
   sh)  set -- zsh ;;
-  nv)  shift; set -- nvim "$@" ;;
   git) shift; set -- lazygit "$@" ;;
 esac
 
-pane_id=$(wezterm cli split-pane --bottom --cwd "$(pwd)" -- "$@")
-wezterm cli zoom-pane --zoom --pane-id "$pane_id"
+pane_id=$("$WEZTERM_BIN" cli split-pane --bottom --cwd "$(pwd)" -- "$@")
+"$WEZTERM_BIN" cli zoom-pane --zoom --pane-id "$pane_id"

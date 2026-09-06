@@ -15,6 +15,7 @@ WezTerm terminal configuration for macOS.
 
 | Key | Action |
 |---|---|
+| `Cmd+Shift+Space` | Open the current directory in Visual Studio Code |
 | `Cmd+W` | Close pane |
 | `Cmd+,` | Split vertically |
 | `Cmd+.` | Split horizontally |
@@ -43,20 +44,18 @@ The config is managed by chezmoi in this repository. See the root
 
 ## wlay - Overlay Pane Command
 
-A shell script that opens an overlay pane by combining `split-pane` +
-`zoom-pane` to cover the current pane. The overlay pane auto-closes on program
-exit, restoring the original pane.
+A shell script that opens a temporary full-screen pane by combining
+`split-pane` and `zoom-pane`. It closes when the program exits, restoring the
+original pane.
 
 ### Usage
 
 | Command | Action |
 |---|---|
 | `wlay` / `wlay sh` | Open zsh |
-| `wlay nv` | Open nvim |
-| `wlay nv file.lua` | Open file in nvim |
 | `wlay git` | Open lazygit |
 
-Any argument other than the subcommands (`sh`, `nv`, `git`) is executed as-is
+Any argument other than the subcommands (`sh`, `git`) is executed as-is
 (e.g. `wlay htop`).
 
 ### Setup

@@ -41,6 +41,20 @@ config.use_ime = true
 
 config.keys = {
 	{
+		key = "Space",
+		mods = "CMD|SHIFT",
+		action = wezterm.action_callback(function(window, pane)
+			local cwd_uri = pane:get_current_working_dir()
+			if not cwd_uri then
+				window:toast_notification("WezTerm", "Could not detect the current directory", nil, 3000)
+				return
+			end
+
+			local cwd = cwd_uri.file_path
+			wezterm.background_child_process({ "/usr/bin/open", "-a", "Visual Studio Code", cwd })
+		end),
+	},
+	{
 		key = "w",
 		mods = "CMD",
 		action = act.CloseCurrentPane({ confirm = true }),
