@@ -27,6 +27,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
 | `~/.config/gh/config.yml` | symlink |
+| `~/.gitconfig` | symlink |
 | `~/.zprofile` | symlink |
 | `~/.zshrc` | symlink |
 | `~/.claude/settings.json` | 実ファイル（テンプレート） |
@@ -42,7 +43,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
   外部からインポートしたルールセット。出自とライセンスが不明なため再配布しない
 - `~/.zsh/`（`git-completion.bash`、`git-prompt.sh`、`_git`）— git 公式の
   スクリプトで GPL-2.0。再配布を避けるため管理対象外。取得方法は後述
-- `~/.gitconfig` — 未着手。`chezmoi add` で追加できる
+- `~/.config/git/ignore` — 未着手。`chezmoi add` で追加できる
 
 ## セットアップ（新マシン）
 
