@@ -27,6 +27,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
 | `~/.config/gh/config.yml` | symlink |
+| `~/.zprofile` | symlink |
 | `~/.zshrc` | symlink |
 | `~/.claude/settings.json` | 実ファイル（テンプレート） |
 | `~/.claude/CLAUDE.md` | symlink |
@@ -39,6 +40,8 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 - `~/.config/karabiner/automatic_backups/` — Karabiner-Elements の自動生成物
 - `~/.config/karabiner/assets/complex_modifications/1737014820.json` —
   外部からインポートしたルールセット。出自とライセンスが不明なため再配布しない
+- `~/.zsh/`（`git-completion.bash`、`git-prompt.sh`、`_git`）— git 公式の
+  スクリプトで GPL-2.0。再配布を避けるため管理対象外。取得方法は後述
 - `~/.gitconfig` — 未着手。`chezmoi add` で追加できる
 
 ## セットアップ（新マシン）
@@ -119,6 +122,46 @@ chezmoi apply
 ```
 
 `chezmoi re-add` はテンプレートには使えない（chezmoi の仕様）。
+
+## シェル設定の役割分担
+
+zsh は読み込むタイミングが違う設定ファイルを持つ。役割を混ぜると設定同士が
+衝突するため、次のように分けている。
+
+| ファイル | 読まれるタイミング | 置くもの |
+|---|---|---|
+| `~/.zprofile` | ログインシェルで 1 回 | 環境変数と PATH |
+| `~/.zshrc` | 対話シェルを開くたび | エイリアス、プロンプト、補完、シェル関数 |
+
+環境変数は `export` すれば子プロセスに継承されるので `.zprofile` で一度
+設定すれば足りる。一方でエイリアスやプロンプトは継承されないため、対話シェル
+ごとに `.zshrc` で設定し直す必要がある。
+
+macOS の端末（Terminal.app、iTerm、wezterm）は既定でログインシェルとして
+起動するため両方が読まれる。そのためどちらに書いても動いてしまうが、
+VS Code の統合ターミナルのような非ログイン対話シェルでは `.zshrc` だけが
+読まれるので、この分担を守らないと環境によって挙動が変わる。
+
+マシンごとに導入状況が違うツール（nodenv、rbenv、PostgreSQL、Flutter、Go、
+VS Code）は存在チェックを通してから設定する。入っていないマシンでは黙って
+スキップされるので、同じ設定ファイルをどのマシンでも使える。
+
+### git の補完スクリプト
+
+`.zshrc` は `~/.zsh/git-completion.bash` があれば git の補完に使う。この
+ファイルは git 公式のもので GPL-2.0 なので、このリポジトリでは配布していない。
+必要なら取得する（なくても補完以外は動く）。
+
+```sh
+mkdir -p ~/.zsh
+curl -o ~/.zsh/git-completion.bash \
+  https://raw.githubusercontent.com/git/git/master/contrib/completion/git-completion.bash
+curl -o ~/.zsh/_git \
+  https://raw.githubusercontent.com/git/git/master/contrib/completion/git-completion.zsh
+```
+
+プロンプトの git ブランチ表示は zsh 組み込みの `vcs_info` を使っているため、
+外部スクリプト（`git-prompt.sh`）は不要。
 
 ## ディレクトリのパーミッション
 
