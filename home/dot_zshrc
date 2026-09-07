@@ -1,5 +1,33 @@
+# PATH
+# ~/.config/scripts は wlay（wezterm のオーバーレイペイン）用。
 export PATH="$HOME/.local/bin:$HOME/.config/scripts:$PATH"
 
+# --- マシン固有のツール --------------------------------------------------
+# 導入されていないマシンでは黙ってスキップされるよう、存在チェックを入れる。
+
+# nodenv
+if [ -d "$HOME/.nodenv" ]; then
+  export PATH="$HOME/.nodenv/bin:$PATH"
+  eval "$(nodenv init -)"
+fi
+
+# postgresql@16
+if [ -d /opt/homebrew/opt/postgresql@16/bin ]; then
+  export PATH="/opt/homebrew/opt/postgresql@16/bin:$PATH"
+fi
+
+# GitHub Copilot CLI
+if [ -x /opt/homebrew/bin/copilot ]; then
+  alias copilot="/opt/homebrew/bin/copilot"
+fi
+
+# --- wezterm CLI ---------------------------------------------------------
+alias wta='(){wezterm cli spawn --new-window --workspace "$1"}'
+alias wtl='wezterm cli list'
+alias wtc='wezterm cli list-clients'
+
+# --- プロンプト ----------------------------------------------------------
+# カレントディレクトリ名と git ブランチを表示する。
 autoload -Uz add-zsh-hook vcs_info
 
 zstyle ':vcs_info:git:*' formats ' (%F{green}%b%f)'
