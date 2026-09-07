@@ -1,5 +1,5 @@
 {
-  "model": "claude-fable-5-1[1m]",
+  "model": "opus[1m]",
   "enabledPlugins": {{ .claudePlugins | toPrettyJson | indent 2 | trim }},
   "extraKnownMarketplaces": {{ .claudeMarketplaces | toPrettyJson | indent 2 | trim }},
   "skipWorkflowUsageWarning": true,
