@@ -16,6 +16,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 |---|---|
 | `~/.claude/settings.json` | テンプレート（マシン固有の値を含む） |
 | `~/.config/wezterm/wlay` | 実行可能属性が必要 |
+| `~/.config/scripts/cst` | 実行可能属性が必要 |
 
 ## 管理対象
 
@@ -24,6 +25,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/wezterm/wezterm.lua` | symlink |
 | `~/.config/wezterm/wlay` | 実ファイル（実行可能） |
 | `~/.config/scripts/wlay` | symlink（`wezterm/wlay` を指す） |
+| `~/.config/scripts/cst` | 実ファイル（実行可能） |
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
 | `~/.config/gh/config.yml` | symlink |
@@ -33,6 +35,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.claude/settings.json` | 実ファイル（テンプレート） |
 | `~/.claude/CLAUDE.md` | symlink |
 | `~/.claude/hooks/notify-when-quiet.sh` | symlink |
+| `~/.claude/hooks/session-status.sh` | symlink |
 | `~/.claude/statusline.sh` | symlink |
 
 管理していないもの:
@@ -180,5 +183,5 @@ source directory がこのリポジトリの場所を指しているため。切
 
 ## ドキュメント
 
-- [wezterm の設定と wlay](docs/wezterm.md)
+- [wezterm の設定と wlay / cst](docs/wezterm.md)
 - [Claude Code グローバル指示の日本語訳](docs/claude-global-instructions.ja.md)

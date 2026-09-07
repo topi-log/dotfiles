@@ -40,6 +40,40 @@ wezterm.on("update-right-status", function(window)
 	window:set_right_status("Cmd+/  ヘルプ")
 end)
 
+-- Claude Code sessions (see docs/wezterm.md, "cst")
+local cst = wezterm.home_dir .. "/.config/scripts/cst"
+local state_labels = { busy = "作業中  ", waiting = "許可待ち", idle = "入力待ち" }
+
+local function truncate_utf8(s, max_chars)
+	if utf8.len(s) and utf8.len(s) > max_chars then
+		return s:sub(1, utf8.offset(s, max_chars + 1) - 1) .. "…"
+	end
+	return s
+end
+
+local function claude_session_choices(current_pane_id)
+	local ok, stdout = wezterm.run_child_process({ cst, "--json" })
+	if not ok then
+		return nil
+	end
+
+	local choices = {}
+	for line in stdout:gmatch("[^\n]+") do
+		local parsed, s = pcall(wezterm.json_parse, line)
+		if parsed and type(s) == "table" then
+			local has_pane = type(s.pane_id) == "number"
+			local mark = (has_pane and s.pane_id == current_pane_id) and "*" or " "
+			local place = s.branch ~= "" and (s.dir .. " (" .. s.branch .. ")") or s.dir
+			local detail = s.tool ~= "" and s.tool or truncate_utf8(s.prompt, 50)
+			table.insert(choices, {
+				id = has_pane and tostring(s.pane_id) or "",
+				label = string.format("%s %s  %s  │  %s", mark, state_labels[s.state] or s.state, place, detail),
+			})
+		end
+	end
+	return choices
+end
+
 -- Input
 config.use_ime = true
 
@@ -52,6 +86,7 @@ config.keys = {
 			description = "Escで閉じる",
 			choices = {
 				{ label = "Cmd+Shift+Space   現在のディレクトリをVS Codeで開く" },
+				{ label = "Cmd+;             Claude Code セッション一覧（選択でペインへ移動）" },
 				{ label = "Cmd+W             現在のペインを閉じる" },
 				{ label = "Cmd+,             ペインを縦分割" },
 				{ label = "Cmd+.             ペインを横分割" },
@@ -74,6 +109,39 @@ config.keys = {
 
 			local cwd = cwd_uri.file_path
 			wezterm.background_child_process({ "/usr/bin/open", "-a", "Visual Studio Code", cwd })
+		end),
+	},
+	{
+		key = ";",
+		mods = "CMD",
+		action = wezterm.action_callback(function(window, pane)
+			local choices = claude_session_choices(pane:pane_id())
+			if choices == nil then
+				window:toast_notification("WezTerm", "cst の実行に失敗しました", nil, 3000)
+				return
+			end
+			if #choices == 0 then
+				window:toast_notification("WezTerm", "Claude Code のセッションはありません", nil, 3000)
+				return
+			end
+			window:perform_action(
+				act.InputSelector({
+					title = "Claude Code セッション",
+					description = "Enter でそのペインへ移動 / Esc で閉じる",
+					fuzzy = false,
+					choices = choices,
+					action = wezterm.action_callback(function(_, _, id)
+						if id == nil or id == "" then
+							return
+						end
+						local target = wezterm.mux.get_pane(tonumber(id))
+						if target then
+							target:activate()
+						end
+					end),
+				}),
+				pane
+			)
 		end),
 	},
 	{

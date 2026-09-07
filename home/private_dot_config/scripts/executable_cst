@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# List what every Claude Code session on this machine is doing.
+#
+#   cst          print a table once
+#   cst -w       redraw every 2 seconds, q to quit
+#   cst --json   one JSON object per session per line (consumed by wezterm.lua)
+#
+# Reads the files written by ~/.claude/hooks/session-status.sh and deletes the
+# ones whose WezTerm pane is gone or that have not been touched for a day.
+set -uo pipefail
+
+STATUS_DIR="${CLAUDE_SESSION_STATUS_DIR:-$HOME/.claude/sessions-status}"
+STALE_SEC=$((24 * 3600))
+PLACE_MAX=28
+PROMPT_INDENT=12
+INTERVAL=2
+SEP=$'\x1f' # field separator; a tab would let `read` merge empty fields
+
+# WezTerm launched from Finder sees neither the Homebrew PATH nor a UTF-8 locale.
+case ":$PATH:" in
+*:/opt/homebrew/bin:*) ;;
+*) PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" ;;
+esac
+export LC_ALL=en_US.UTF-8
+
+if ! command -v jq >/dev/null 2>&1; then
+	echo "cst: jq is required (brew install jq)" >&2
+	exit 1
+fi
+
+wezterm_bin() {
+	if command -v wezterm >/dev/null 2>&1; then
+		command -v wezterm
+	elif [ -x /Applications/WezTerm.app/Contents/MacOS/wezterm ]; then
+		echo /Applications/WezTerm.app/Contents/MacOS/wezterm
+	else
+		return 1
+	fi
+}
+
+# Pane ids currently open in WezTerm, one per line. Fails when WezTerm is not
+# reachable, in which case callers skip the pane-based cleanup.
+live_panes() {
+	local bin
+	bin=$(wezterm_bin) || return 1
+	"$bin" cli list --format json 2>/dev/null | jq -r '.[].pane_id' 2>/dev/null
+}
+
+# Emit one enriched JSON object per live session, sorted by pane id.
+collect() {
+	local now panes have_panes=0 f rec updated pane cwd dir branch
+	now=$(date +%s)
+	if panes=$(live_panes) && [ -n "$panes" ]; then
+		have_panes=1
+	fi
+
+	shopt -s nullglob
+	for f in "$STATUS_DIR"/*.json; do
+		rec=$(jq -c . "$f" 2>/dev/null) || continue
+		IFS=$SEP read -r updated pane cwd < <(
+			jq -r --arg sep "$SEP" '[(.updated_at // 0), (.pane_id // ""), (.cwd // "")] | map(tostring) | join($sep)' <<<"$rec"
+		)
+		if ((now - updated > STALE_SEC)); then
+			rm -f "$f"
+			continue
+		fi
+		if [ "$have_panes" = 1 ] && [ -n "$pane" ] && ! grep -qx "$pane" <<<"$panes"; then
+			rm -f "$f"
+			continue
+		fi
+		dir=${cwd##*/}
+		[ -n "$dir" ] || dir=/
+		branch=$(git -C "$cwd" branch --show-current 2>/dev/null || true)
+		jq -c --arg dir "$dir" --arg branch "$branch" --argjson now "$now" \
+			'. + {dir: $dir, branch: $branch, age: ([$now - (.updated_at // $now), 0] | max)}' <<<"$rec"
+	done | jq -s -c 'sort_by(.pane_id // 1e9) | .[]'
+}
+
+# Display width, treating every non-ASCII character as 2 columns (CJK).
+display_width() {
+	local s=$1 chars bytes
+	chars=${#s}
+	bytes=$(LC_ALL=C bash -c 'printf %s "${#1}"' _ "$s")
+	echo $((chars + (bytes - chars) / 2))
+}
+
+# Print $1 left-aligned in $2 display columns.
+pad() {
+	local s=$1 width=$2 w
+	w=$(display_width "$s")
+	printf '%s%*s' "$s" $((width > w ? width - w : 0)) ''
+}
+
+# Cut $1 to at most $2 display columns, appending … when something was dropped.
+truncate_cols() {
+	local s=$1 max=$2 kept='' kept_w=0 total_w=0 i c cp cw
+	for ((i = 0; i < ${#s}; i++)); do
+		c=${s:i:1}
+		printf -v cp '%d' "'$c"
+		cw=$((cp > 127 ? 2 : 1))
+		total_w=$((total_w + cw))
+		if ((kept_w + cw <= max - 1)); then
+			kept+=$c
+			kept_w=$((kept_w + cw))
+		fi
+	done
+	if ((total_w <= max)); then
+		printf '%s' "$s"
+	else
+		printf '%s…' "$kept"
+	fi
+}
+
+state_label() {
+	case "$1" in
+	busy) printf '\033[33m作業中  \033[0m' ;;
+	waiting) printf '\033[31m許可待ち\033[0m' ;;
+	idle) printf '\033[32m入力待ち\033[0m' ;;
+	*) pad "$1" 8 ;;
+	esac
+}
+
+age_label() {
+	local s=$1
+	if ((s < 60)); then
+		printf '%ds' "$s"
+	elif ((s < 3600)); then
+		printf '%dm' $((s / 60))
+	else
+		printf '%dh' $((s / 3600))
+	fi
+}
+
+render_table() {
+	local rows cols place_width=4 tool_width w mark state place age tool prompt pane
+	rows=$(collect)
+	if [ -z "$rows" ]; then
+		echo "Claude Code のセッションはありません"
+		return
+	fi
+
+	cols=$(tput cols 2>/dev/null || echo 120)
+	while IFS= read -r place; do
+		w=$(display_width "$place")
+		((w > place_width)) && place_width=$w
+	done < <(jq -r 'if .branch == "" then .dir else "\(.dir) (\(.branch))" end' <<<"$rows")
+	((place_width > PLACE_MAX)) && place_width=$PLACE_MAX
+	# mark(1) + sp + state(8) + 2 + place + 2 + age(5) + 2
+	tool_width=$((cols - 21 - place_width))
+	((tool_width < 10)) && tool_width=10
+
+	printf '  %s  %s  %s  %s\n' \
+		"$(pad 状態 8)" "$(pad 場所 "$place_width")" "$(pad 経過 5)" "ツール / プロンプト"
+	while IFS=$SEP read -r pane state place age tool prompt; do
+		mark=" "
+		[ -n "${WEZTERM_PANE:-}" ] && [ "$pane" = "$WEZTERM_PANE" ] && mark="*"
+		printf '%s %s  %s  %s  %s\n' \
+			"$mark" "$(state_label "$state")" \
+			"$(pad "$(truncate_cols "$place" "$place_width")" "$place_width")" \
+			"$(pad "$(age_label "$age")" 5)" "$(truncate_cols "$tool" "$tool_width")"
+		if [ -n "$prompt" ]; then
+			printf '%*s%s\n' "$PROMPT_INDENT" '' "$(truncate_cols "$prompt" $((cols - PROMPT_INDENT)))"
+		fi
+	done < <(jq -r --arg sep "$SEP" '
+      [ (.pane_id // "" | tostring),
+        .state,
+        (if .branch == "" then .dir else "\(.dir) (\(.branch))" end),
+        (.age | tostring),
+        .tool,
+        .prompt
+      ] | join($sep)' <<<"$rows")
+}
+
+watch() {
+	local key frame
+	tput smcup 2>/dev/null || true
+	tput civis 2>/dev/null || true
+	trap 'tput cnorm 2>/dev/null; tput rmcup 2>/dev/null; exit 0' INT TERM EXIT
+	while :; do
+		frame=$(
+			render_table
+			printf '\n%s  (q で終了)\n' "$(date '+%H:%M:%S')"
+		)
+		# Overwrite in place instead of clearing the screen first: build the
+		# whole frame, then rewrite every line (clearing its tail) and drop
+		# whatever was left below. Clearing first leaves a visible blank flash
+		# because rendering takes a few hundred milliseconds.
+		frame=${frame//$'\n'/$'\e[K\n'}
+		printf '\e[H%s\e[K\e[J' "$frame"
+		if read -rs -t "$INTERVAL" -n 1 key && [ "$key" = "q" ]; then
+			break
+		fi
+	done
+}
+
+case "${1:-}" in
+"") render_table ;;
+-w | --watch) watch ;;
+--json) collect ;;
+-h | --help)
+	sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+	;;
+*)
+	echo "cst: unknown option: $1" >&2
+	exit 2
+	;;
+esac

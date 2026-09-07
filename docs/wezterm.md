@@ -17,6 +17,7 @@ WezTerm terminal configuration for macOS.
 |---|---|
 | `Cmd+/` | Show the shortcut list |
 | `Cmd+Shift+Space` | Open the current directory in Visual Studio Code |
+| `Cmd+;` | List Claude Code sessions; pick one to jump to its pane |
 | `Cmd+W` | Close pane |
 | `Cmd+,` | Split vertically |
 | `Cmd+.` | Split horizontally |
@@ -68,6 +69,49 @@ Any argument other than the subcommands (`sh`, `git`) is executed as-is
 ```bash
 export PATH="$HOME/.config/scripts:$PATH"
 ```
+
+## cst - Claude Code Session Status
+
+Lists every running Claude Code session: state, directory and branch, elapsed
+time since the last event, the tool it is executing, and (on the second line)
+the last prompt. Long values are cut to the terminal width.
+
+```
+  状態      場所                          経過   ツール / プロンプト
+* 作業中    dotfiles (main)               3s     Bash: Run tests
+            hooks を追加してセッション一覧を出せるようにしたい
+  許可待ち  crm-lp (feat/header-redesign)  2m     Edit
+            LP のヘッダーをリニューアルして
+  入力待ち  sub1 (main)                   15m
+```
+
+`*` marks the pane the command was run from.
+
+| Command | Action |
+|---|---|
+| `cst` | Print the table once |
+| `cst -w` | Redraw every 2 seconds, `q` to quit (`wlay cst -w` opens it in an overlay pane) |
+| `cst --json` | One JSON object per session per line (used by `Cmd+;`) |
+| `Cmd+;` | Same list as a WezTerm overlay; Enter jumps to that session's pane |
+
+### How it works
+
+Claude Code hooks (SessionStart / UserPromptSubmit / PreToolUse / PostToolUse /
+PermissionRequest / Stop / SessionEnd) run `~/.claude/hooks/session-status.sh`,
+which writes one JSON file per session to `~/.claude/sessions-status/`. The
+hook inherits `WEZTERM_PANE` from Claude Code, which is how a session is tied to
+its pane. `cst` reads those files and removes entries whose pane no longer
+exists or that have not been updated for 24 hours.
+
+Only sessions started after the hooks were installed appear. Sessions started
+outside WezTerm (VS Code extension, etc.) are listed without a pane and cannot
+be jumped to.
+
+### Setup
+
+Requires `jq`. `chezmoi apply` installs the hook, the `cst` script and the
+hook registrations in `~/.claude/settings.json`. Restart running Claude Code
+sessions so they pick up the new hooks.
 
 ## Credits
 
