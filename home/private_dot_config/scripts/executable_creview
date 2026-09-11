@@ -159,7 +159,18 @@ def slice_cells(text: str, start: int, width: int) -> str:
 
 
 def textmate_highlight(pathname: str, contents: List[List[str]]):
-    node = shutil.which("node")
+    node = next(
+        (
+            candidate
+            for candidate in (
+                shutil.which("node"),
+                "/opt/homebrew/bin/node",
+                "/usr/local/bin/node",
+            )
+            if candidate and os.path.isfile(candidate) and os.access(candidate, os.X_OK)
+        ),
+        None,
+    )
     helper = os.path.expanduser("~/.config/creview/highlight.js")
     if not node or not os.path.isfile(helper):
         return [[[[line, "#D4D4D4"]] for line in lines] for lines in contents]
