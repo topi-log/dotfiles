@@ -18,6 +18,7 @@ WezTerm terminal configuration for macOS.
 | `Cmd+/` | Show the shortcut list |
 | `Cmd+Shift+Space` | Open the current project in Visual Studio Code (Git root, or the current directory outside Git) |
 | `Cmd+Shift+R` | Review the current project's changes in a dedicated full-screen tab |
+| `Cmd+Shift+D` | Review changes with VS Code's native diff editor and line comments |
 | `Cmd+;` | List Claude Code sessions; pick one to jump to its pane |
 | `Cmd+W` | Close pane |
 | `Cmd+,` | Split vertically |
@@ -93,6 +94,30 @@ the interactive terminal required by a TUI.
 subdirectory. Pass paths or regular `git diff` options after it to narrow the
 view (for example, `wlay diff -- README.md`). Quit the pager with `q`; the
 temporary pane then closes and the original pane is restored.
+
+## VS Code review
+
+`Cmd+Shift+D` opens the same project in the local `Claude Review` VS Code
+extension. The extension reuses VS Code, lists all changes in its activity-bar
+view, and opens the selected file with VS Code's native read-only Diff Editor.
+This gives the review the active VS Code theme, language extensions and syntax
+highlighting.
+
+1. Select a file under **Claude Review → Changed Files**.
+2. Put the cursor on a before/after line in the Diff Editor.
+3. Run **Claude Review: Add Comment on Current Line** from the Command Palette,
+   click the comment button in the editor title, or press `Cmd+Alt+C`.
+4. Review comments under **Review Comments**. Inline comments can be deleted
+   with their trash action; the view title also has clear/send actions.
+5. Choose **Send Comments to Claude Code**. The combined request is inserted
+   into the original Claude Code prompt as an editable draft, without pressing
+   Enter.
+
+The extension is managed at
+`~/.vscode/extensions/topilog.claude-review-0.1.0`. After the first
+`chezmoi apply` on a machine, run **Developer: Reload Window** once in VS Code
+so it discovers the extension. It has no npm dependencies and is not published
+to the Marketplace.
 
 ### Setup
 

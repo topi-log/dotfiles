@@ -27,6 +27,8 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/scripts/wlay` | symlink（`wezterm/wlay` を指す） |
 | `~/.config/scripts/cst` | 実ファイル（実行可能） |
 | `~/.config/scripts/creview` | 実ファイル（実行可能） |
+| `~/.config/scripts/creview-code` | 実ファイル（実行可能） |
+| `~/.vscode/extensions/topilog.claude-review-0.1.0/` | VS Codeレビュー拡張 |
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
 | `~/.config/gh/config.yml` | symlink |
