@@ -79,8 +79,9 @@ by a chezmoi `run_onchange` script when its lockfile changes.
 |---|---|
 | `j` / `k` or arrows | Move through files or diff lines |
 | `Tab` / `Enter` | Focus the diff; `Esc` returns to the file list |
+| `n` / `N` | Jump to the next/previous change hunk (wraps at the end) |
 | `h` / `l` or left/right | Scroll long diff lines horizontally |
-| `c` | Add or replace a review comment; `Esc` cancels input |
+| `c` | Add or replace a review comment, shown below its line; `Esc` cancels input |
 | `x` | Remove the comment on the selected line |
 | `v` | View all review comments |
 | `?` | Show the keyboard help |

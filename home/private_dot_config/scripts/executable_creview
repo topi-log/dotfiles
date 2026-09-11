@@ -158,6 +158,21 @@ def slice_cells(text: str, start: int, width: int) -> str:
     return "".join(result)
 
 
+def wrap_cells(text: str, width: int) -> List[str]:
+    """Wrap text by terminal display cells without splitting wide characters."""
+    if width <= 0:
+        return [""]
+    lines = []
+    remaining = text
+    while remaining:
+        part = clip(remaining, width)
+        if not part:
+            break
+        lines.append(part)
+        remaining = remaining[len(part):]
+    return lines or [""]
+
+
 def textmate_highlight(pathname: str, contents: List[List[str]]):
     node = next(
         (
@@ -212,14 +227,16 @@ class ReviewUI:
         self.load_diff()
 
     def load_diff(self):
-        self.row_index = 0
-        self.row_scroll = 0
         self.horizontal_scroll = 0
         if not self.files:
             self.rows = []
+            self.row_index = 0
+            self.row_scroll = 0
             return
         old, new, _ = file_versions(self.root, self.files[self.file_index])
         self.rows = side_by_side(old, new)
+        self.row_index = next((index for index, row in enumerate(self.rows) if row.kind != "equal"), 0)
+        self.row_scroll = max(0, self.row_index - 3)
         self.old_highlights, self.new_highlights = textmate_highlight(self.files[self.file_index].path, [old, new])
 
     def add(self, y: int, x: int, text: str, attr=0):
@@ -251,6 +268,49 @@ class ReviewUI:
         curses.init_pair(slot, slot, -1)
         self.theme_pairs[color] = slot
         return slot
+
+    def comments_for_row(self, row: DiffRow) -> List[Comment]:
+        if not self.files:
+            return []
+        path = self.files[self.file_index].path
+        return [
+            comment for comment in self.comments
+            if comment.path == path and (
+                (comment.side == "before" and comment.line == row.old_no)
+                or (comment.side == "after" and comment.line == row.new_no)
+            )
+        ]
+
+    def row_height(self, row: DiffRow, width: int) -> int:
+        comment_width = max(1, width - 4)
+        return 1 + sum(len(wrap_cells(comment.text, comment_width)) for comment in self.comments_for_row(row))
+
+    def ensure_row_visible(self, body_height: int, diff_width: int):
+        if not self.rows:
+            return
+        if self.row_index < self.row_scroll:
+            self.row_scroll = self.row_index
+        while self.row_scroll < self.row_index:
+            used = sum(self.row_height(row, diff_width) for row in self.rows[self.row_scroll:self.row_index + 1])
+            if used <= body_height:
+                break
+            self.row_scroll += 1
+
+    def change_indices(self) -> List[int]:
+        return [
+            index for index, row in enumerate(self.rows)
+            if row.kind != "equal" and (index == 0 or self.rows[index - 1].kind == "equal")
+        ]
+
+    def jump_change(self, direction: int):
+        changes = self.change_indices()
+        if not changes:
+            self.message = "No changed lines"
+            return
+        if direction > 0:
+            self.row_index = next((index for index in changes if index > self.row_index), changes[0])
+        else:
+            self.row_index = next((index for index in reversed(changes) if index < self.row_index), changes[-1])
 
     def draw_code(self, y: int, x: int, segments, start: int, width: int, selected: bool):
         position = 0
@@ -285,7 +345,10 @@ class ReviewUI:
         self.add(0, display_width(title), os.path.basename(self.root), curses.A_DIM)
         self.add(1, 0, "Changed files", curses.A_BOLD if self.focus == "files" else curses.A_DIM)
         offset = f"  horizontal: {self.horizontal_scroll}" if self.horizontal_scroll else ""
-        self.add(1, list_width + 1, "BEFORE" + offset, curses.A_BOLD | curses.color_pair(2))
+        changes = self.change_indices()
+        current_change = sum(1 for index in changes if index <= self.row_index) if changes else 0
+        change_status = f"  hunk: {current_change}/{len(changes)}"
+        self.add(1, list_width + 1, "BEFORE" + offset + change_status, curses.A_BOLD | curses.color_pair(2))
         self.add(1, list_width + 1 + half, "AFTER" + offset, curses.A_BOLD | curses.color_pair(1))
 
         for y in range(1, body_bottom):
@@ -305,15 +368,14 @@ class ReviewUI:
             selected = self.focus == "files" and index == self.file_index
             self.add(body_top + offset, 0, clip(label, list_width), self.color(pair, selected))
 
-        if self.row_index < self.row_scroll:
-            self.row_scroll = self.row_index
-        if self.row_index >= self.row_scroll + body_height:
-            self.row_scroll = self.row_index - body_height + 1
+        self.ensure_row_visible(body_height, diff_width)
         comment_keys = {(c.path, c.side, c.line) for c in self.comments}
         current_path = self.files[self.file_index].path if self.files else ""
         content_width = half - 7
-        for offset, row in enumerate(self.rows[self.row_scroll:self.row_scroll + body_height]):
-            index = self.row_scroll + offset
+        y = body_top
+        for index, row in enumerate(self.rows[self.row_scroll:], self.row_scroll):
+            if y >= body_bottom:
+                break
             selected = self.focus == "diff" and index == self.row_index
             old_mark = "●" if row.old_no and (current_path, "before", row.old_no) in comment_keys else "-" if row.kind in ("delete", "change") else " "
             new_mark = "●" if row.new_no and (current_path, "after", row.new_no) in comment_keys else "+" if row.kind in ("add", "change") else " "
@@ -321,15 +383,25 @@ class ReviewUI:
             new_prefix = f"{new_mark}{row.new_no or '':>4} "
             old_pair = 2 if row.kind in ("delete", "change") else 0
             new_pair = 1 if row.kind in ("add", "change") else 0
-            y = body_top + offset
             self.add(y, list_width + 1, old_prefix, self.color(old_pair, selected))
             self.add(y, list_width + half + 1, new_prefix, self.color(new_pair, selected))
             old_segments = self.old_highlights[row.old_no - 1] if row.old_no and row.old_no <= len(self.old_highlights) else []
             new_segments = self.new_highlights[row.new_no - 1] if row.new_no and row.new_no <= len(self.new_highlights) else []
             self.draw_code(y, list_width + 1 + 6, old_segments, self.horizontal_scroll, content_width, selected)
             self.draw_code(y, list_width + half + 1 + 6, new_segments, self.horizontal_scroll, content_width, selected)
+            y += 1
+            for comment in self.comments_for_row(row):
+                side = "変更後" if comment.side == "after" else "変更前"
+                prefix = f"  💬 {side}: "
+                wrapped = wrap_cells(comment.text, max(1, diff_width - display_width(prefix) - 2))
+                for part_index, part in enumerate(wrapped):
+                    if y >= body_bottom:
+                        break
+                    label = prefix if part_index == 0 else " " * display_width(prefix)
+                    self.add(y, list_width + 1, label + part, curses.A_BOLD | curses.color_pair(3))
+                    y += 1
 
-        help_text = "j/k: move  h/l: horizontal  c: comment  v: comments  ?: help  S: send"
+        help_text = "j/k: move  n/N: next/prev hunk  h/l: horizontal  c: comment  ?: help  S: send"
         selected_comment = self.comment_at_cursor()
         if selected_comment and not self.message:
             help_text = "Comment: " + selected_comment.text
@@ -423,6 +495,7 @@ class ReviewUI:
             "Tab / Enter           左右diffへフォーカスを移動",
             "Esc                   ファイル一覧へ戻る／コメント入力を中止",
             "h / l または ← / →   長い行を横スクロール",
+            "n / N                 次／前の変更ブロックへジャンプ",
             "c                     選択行にコメントを追加・上書き",
             "x                     選択行のコメントを削除",
             "v                     追加済みコメントを一覧表示",
@@ -488,6 +561,10 @@ class ReviewUI:
                 self.horizontal_scroll = max(0, self.horizontal_scroll - 8)
             elif key in (ord("l"), curses.KEY_RIGHT) and self.focus == "diff":
                 self.horizontal_scroll += 8
+            elif key == ord("n") and self.focus == "diff":
+                self.jump_change(1)
+            elif key == ord("N") and self.focus == "diff":
+                self.jump_change(-1)
             elif key in (10, 13) and self.focus == "files":
                 self.focus = "diff"
             elif key == 27:
