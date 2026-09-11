@@ -224,16 +224,24 @@ class ReviewUI:
                 self.lexers[path] = None
         return self.lexers[path]
 
-    def syntax_pair(self, token) -> int:
+    def syntax_pair(self, token, value: str = "", next_text: str = "") -> int:
         if TokenComment is not None and token in TokenComment:
             return 5
         if Keyword is not None and token in Keyword:
+            if token in Keyword.Declaration or token in Keyword.Type or token in Keyword.Namespace:
+                return 13
             return 6
         if String is not None and token in String:
             return 7
         if Number is not None and token in Number:
             return 8
         if Name is not None and token in Name.Function:
+            return 9
+        # Pygments' Go lexer emits declarations, calls, and methods as
+        # Name.Other. VS Code's Go language server identifies callable names
+        # semantically, so approximate that classification from the following
+        # parenthesis for the terminal renderer.
+        if Name is not None and token in Name and value.strip() and next_text.lstrip().startswith("("):
             return 9
         if Name is not None and (token in Name.Class or token in Name.Namespace or token in Name.Decorator):
             return 10
@@ -246,11 +254,12 @@ class ReviewUI:
         tokens = list(lex(text, lexer)) if lexer and lex else [(None, text)]
         position = 0
         drawn = 0
-        for token, value in tokens:
+        for index, (token, value) in enumerate(tokens):
             value = value.rstrip("\n").replace("\t", "    ")
+            next_text = "".join(part for _, part in tokens[index + 1:] if part.strip())
             visible = slice_cells(value, max(0, start - position), max(0, width - drawn))
             if visible and position + display_width(value) > start:
-                self.add(y, x + drawn, visible, self.color(self.syntax_pair(token), selected))
+                self.add(y, x + drawn, visible, self.color(self.syntax_pair(token, value, next_text), selected))
                 drawn += display_width(visible)
             position += display_width(value)
             if drawn >= width:
@@ -517,6 +526,7 @@ def main():
                 24: (106, 153, 85),  # added
                 25: (209, 105, 105), # deleted
                 26: (220, 220, 170), # modified
+                27: (86, 156, 214),  # declaration #569CD6
             }
             for slot, (red, green, blue) in dark_plus.items():
                 curses.init_color(slot, round(red * 1000 / 255), round(green * 1000 / 255), round(blue * 1000 / 255))
@@ -533,6 +543,7 @@ def main():
                 10: 22,
                 11: 23,
                 12: 16,
+                13: 27,
             }
         else:
             colors = {
@@ -548,6 +559,7 @@ def main():
                 10: curses.COLOR_CYAN,
                 11: curses.COLOR_BLUE,
                 12: -1,
+                13: curses.COLOR_BLUE,
             }
         for pair, foreground in colors.items():
             curses.init_pair(pair, foreground, -1)
