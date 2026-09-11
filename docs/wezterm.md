@@ -83,7 +83,7 @@ by a chezmoi `run_onchange` script when its lockfile changes.
 | `[` / `]` | Select the before/after side as the comment target |
 | `n` / `N` | Jump to the next/previous change hunk (wraps at the end) |
 | `h` / `l` or left/right | Scroll long diff lines horizontally |
-| `c` | Open the full-screen multiline comment editor for the selected side |
+| `c` | Open the multiline comment editor below the visible diff for the selected side |
 | `Shift+Enter` while commenting | Insert a newline (`Enter` submits; `Esc` cancels) |
 | `x` | Remove the comment on the selected line |
 | `v` | View all review comments |

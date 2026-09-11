@@ -308,8 +308,23 @@ class ReviewUI:
         ]
 
     def row_height(self, row: DiffRow, width: int) -> int:
-        comment_width = max(1, width - 4)
-        return 1 + sum(len(wrap_comment(comment.text, comment_width)) for comment in self.comments_for_row(row))
+        column_width = max(1, width // 2 - 2)
+        before_height = sum(
+            len(self.comment_lines(comment, column_width))
+            for comment in self.comments_for_row(row) if comment.side == "before"
+        )
+        after_height = sum(
+            len(self.comment_lines(comment, column_width))
+            for comment in self.comments_for_row(row) if comment.side == "after"
+        )
+        return 1 + max(before_height, after_height)
+
+    def comment_lines(self, comment: Comment, width: int) -> List[str]:
+        side = "変更後" if comment.side == "after" else "変更前"
+        prefix = f"💬 {side}: "
+        wrapped = wrap_comment(comment.text, max(1, width - display_width(prefix)))
+        indent = " " * display_width(prefix)
+        return [(prefix if index == 0 else indent) + part for index, part in enumerate(wrapped)]
 
     def ensure_row_visible(self, body_height: int, diff_width: int):
         if not self.rows:
@@ -446,16 +461,19 @@ class ReviewUI:
             self.draw_code(y, list_width + 1 + 6, old_segments, self.horizontal_scroll, content_width, selected, old_background)
             self.draw_code(y, list_width + half + 1 + 6, new_segments, self.horizontal_scroll, content_width, selected, new_background)
             y += 1
+            before_lines = []
+            after_lines = []
             for comment in self.comments_for_row(row):
-                side = "変更後" if comment.side == "after" else "変更前"
-                prefix = f"  💬 {side}: "
-                wrapped = wrap_comment(comment.text, max(1, diff_width - display_width(prefix) - 2))
-                for part_index, part in enumerate(wrapped):
-                    if y >= body_bottom:
-                        break
-                    label = prefix if part_index == 0 else " " * display_width(prefix)
-                    self.add(y, list_width + 1, label + part, curses.A_BOLD | curses.color_pair(3))
-                    y += 1
+                target = before_lines if comment.side == "before" else after_lines
+                target.extend(self.comment_lines(comment, half - 2))
+            for comment_offset in range(max(len(before_lines), len(after_lines))):
+                if y >= body_bottom:
+                    break
+                if comment_offset < len(before_lines):
+                    self.add(y, list_width + 2, clip(before_lines[comment_offset], half - 3), curses.A_BOLD | curses.color_pair(3))
+                if comment_offset < len(after_lines):
+                    self.add(y, list_width + half + 2, clip(after_lines[comment_offset], half - 3), curses.A_BOLD | curses.color_pair(3))
+                y += 1
 
         help_text = "j/k: move  [/] side  n/N: hunk  c: comment  ?: help  S: send"
         selected_comment = self.comment_at_cursor()
@@ -490,18 +508,21 @@ class ReviewUI:
         try:
             while True:
                 height, width = self.screen.getmaxyx()
-                self.screen.erase()
-                self.add(0, 0, f" レビューコメント — {title} ", curses.A_BOLD | curses.color_pair(4))
-                self.add(1, 0, "─" * max(0, width - 1), curses.A_DIM)
+                self.draw()
+                panel_top = max(5, height // 2)
+                for panel_y in range(panel_top, height):
+                    self.screen.move(panel_y, 0)
+                    self.screen.clrtoeol()
+                self.add(panel_top, 0, f" レビューコメント — {title} ", curses.A_BOLD | curses.A_REVERSE)
 
                 body_width = max(1, width - 4)
-                body_height = max(1, height - 4)
+                body_height = max(1, height - panel_top - 2)
                 rendered = wrap_comment(value, body_width)
                 scroll = max(0, len(rendered) - body_height)
                 for offset, line in enumerate(rendered[scroll:scroll + body_height]):
-                    self.add(2 + offset, 2, line)
+                    self.add(panel_top + 1 + offset, 2, line)
 
-                cursor_line = min(height - 2, 2 + len(rendered) - 1 - scroll)
+                cursor_line = min(height - 2, panel_top + 1 + len(rendered) - 1 - scroll)
                 cursor_x = min(width - 2, 2 + display_width(rendered[-1]))
                 self.add(height - 1, 0, "Shift+Enter: 改行  Enter: 保存  Esc: キャンセル", curses.A_REVERSE)
                 self.screen.move(cursor_line, cursor_x)
@@ -528,6 +549,7 @@ class ReviewUI:
         existing = self.comment_at_cursor()
         label = "BEFORE" if side == "before" else "AFTER"
         title = f"{label} {path}:{line}"
+        self.row_scroll = max(0, self.row_index - 2)
         text = self.input_comment(title, existing.text if existing else "")
         if text is None:
             self.message = "Comment cancelled"
