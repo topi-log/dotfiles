@@ -226,6 +226,7 @@ class ReviewUI:
         self.horizontal_scroll = 0
         self.focus = "files"
         self.comment_side = "after"
+        self.selection_anchor: Optional[int] = None
         self.comments: List[Comment] = []
         self.old_highlights = []
         self.new_highlights = []
@@ -237,6 +238,7 @@ class ReviewUI:
         self.load_diff()
 
     def load_diff(self):
+        self.selection_anchor = None
         self.horizontal_scroll = 0
         if not self.files:
             self.rows = []
@@ -367,6 +369,17 @@ class ReviewUI:
         elif row.old_no is not None:
             self.comment_side = "before"
 
+    def selection_bounds(self) -> Optional[Tuple[int, int]]:
+        if self.selection_anchor is None:
+            return None
+        return min(self.selection_anchor, self.row_index), max(self.selection_anchor, self.row_index)
+
+    def row_is_selected(self, index: int, side: str) -> bool:
+        if self.focus != "diff" or side != self.comment_side:
+            return False
+        bounds = self.selection_bounds()
+        return bounds[0] <= index <= bounds[1] if bounds else index == self.row_index
+
     def draw_code(self, y: int, x: int, segments, start: int, width: int, selected: bool, background: Optional[str]):
         position = 0
         drawn = 0
@@ -376,7 +389,7 @@ class ReviewUI:
             if visible and position + display_width(value) > start:
                 attr = curses.color_pair(self.theme_pair(color, background))
                 if selected:
-                    attr |= curses.A_BOLD
+                    attr |= curses.A_BOLD | curses.A_UNDERLINE
                 self.add(y, x + drawn, visible, attr)
                 drawn += display_width(visible)
             position += display_width(value)
@@ -436,7 +449,8 @@ class ReviewUI:
         for index, row in enumerate(self.rows[self.row_scroll:], self.row_scroll):
             if y >= body_bottom:
                 break
-            selected = self.focus == "diff" and index == self.row_index
+            old_selected = self.row_is_selected(index, "before") and row.old_no is not None
+            new_selected = self.row_is_selected(index, "after") and row.new_no is not None
             old_mark = "●" if row.old_no and (current_path, "before", row.old_no) in comment_keys else "-" if row.kind in ("delete", "change") else " "
             new_mark = "●" if row.new_no and (current_path, "after", row.new_no) in comment_keys else "+" if row.kind in ("add", "change") else " "
             old_prefix = f"{old_mark}{row.old_no or '':>4} "
@@ -447,9 +461,10 @@ class ReviewUI:
             new_foreground = "#6A9955" if new_background else "#D4D4D4"
             old_attr = curses.color_pair(self.theme_pair(old_foreground, old_background))
             new_attr = curses.color_pair(self.theme_pair(new_foreground, new_background))
-            if selected:
-                old_attr |= curses.A_BOLD
-                new_attr |= curses.A_BOLD
+            if old_selected:
+                old_attr |= curses.A_BOLD | curses.A_UNDERLINE
+            if new_selected:
+                new_attr |= curses.A_BOLD | curses.A_UNDERLINE
             if old_background:
                 self.add(y, list_width + 1, " " * (half - 1), old_attr)
             if new_background:
@@ -458,8 +473,8 @@ class ReviewUI:
             self.add(y, list_width + half + 1, new_prefix, new_attr)
             old_segments = self.old_highlights[row.old_no - 1] if row.old_no and row.old_no <= len(self.old_highlights) else []
             new_segments = self.new_highlights[row.new_no - 1] if row.new_no and row.new_no <= len(self.new_highlights) else []
-            self.draw_code(y, list_width + 1 + 6, old_segments, self.horizontal_scroll, content_width, selected, old_background)
-            self.draw_code(y, list_width + half + 1 + 6, new_segments, self.horizontal_scroll, content_width, selected, new_background)
+            self.draw_code(y, list_width + 1 + 6, old_segments, self.horizontal_scroll, content_width, old_selected, old_background)
+            self.draw_code(y, list_width + half + 1 + 6, new_segments, self.horizontal_scroll, content_width, new_selected, new_background)
             y += 1
             before_lines = []
             after_lines = []
@@ -475,7 +490,11 @@ class ReviewUI:
                     self.add(y, list_width + half + 2, clip(after_lines[comment_offset], half - 3), curses.A_BOLD | curses.color_pair(3))
                 y += 1
 
-        help_text = "j/k: move  [/] side  n/N: hunk  c: comment  y: copy  ?: help  S: send"
+        bounds = self.selection_bounds()
+        if bounds:
+            help_text = f"VISUAL {bounds[1] - bounds[0] + 1} rows  j/k: extend  y: copy  Esc: cancel"
+        else:
+            help_text = "j/k: move  [/] side  n/N: hunk  c: comment  V: select  y: copy  ?: help  S: send"
         selected_comment = self.comment_at_cursor()
         if selected_comment and not self.message:
             help_text = "Comment: " + selected_comment.text
@@ -569,18 +588,28 @@ class ReviewUI:
         self.comments.remove(comment)
         self.message = "Comment removed"
 
-    def copy_selected_line(self):
+    def copy_selected_lines(self):
         if not self.rows:
             return
-        self.select_side(self.comment_side)
-        row = self.rows[self.row_index]
-        text = row.old_text if self.comment_side == "before" else row.new_text
+        bounds = self.selection_bounds()
+        start, end = bounds if bounds else (self.row_index, self.row_index)
+        lines = []
+        for row in self.rows[start:end + 1]:
+            if self.comment_side == "before" and row.old_no is not None:
+                lines.append(row.old_text)
+            elif self.comment_side == "after" and row.new_no is not None:
+                lines.append(row.new_text)
+        if not lines:
+            self.message = "No lines on selected side"
+            return
+        text = "\n".join(lines)
         result = subprocess.run(["/usr/bin/pbcopy"], input=text.encode("utf-8"))
         if result.returncode == 0:
             label = "BEFORE" if self.comment_side == "before" else "AFTER"
-            self.message = f"Copied {label} line"
+            self.message = f"Copied {len(lines)} {label} line(s)"
+            self.selection_anchor = None
         else:
-            self.message = "Could not copy line"
+            self.message = "Could not copy lines"
 
     def show_page(self, title: str, lines: List[str]):
         self.screen.erase()
@@ -603,7 +632,9 @@ class ReviewUI:
             "n / N                 次／前の変更ブロックへジャンプ",
             "c                     選択側の行にコメントを追加・上書き",
             "  入力中: Shift+Enter コメント内で改行（Enterは確定）",
-            "y                     選択側のコード1行をコピー",
+            "V                     複数行選択を開始",
+            "  選択中: j / k       選択範囲を拡張",
+            "y                     現在行／選択範囲をコピー",
             "x                     選択行のコメントを削除",
             "v                     追加済みコメントを一覧表示",
             "S                     コメントをClaude Codeへ下書き転送",
@@ -650,6 +681,7 @@ class ReviewUI:
             key = self.screen.getch()
             self.message = ""
             if key == 9:
+                self.selection_anchor = None
                 self.focus = "diff" if self.focus == "files" else "files"
             elif key in (ord("j"), curses.KEY_DOWN):
                 if self.focus == "files" and self.files:
@@ -657,14 +689,16 @@ class ReviewUI:
                     self.load_diff()
                 elif self.rows:
                     self.row_index = min(len(self.rows) - 1, self.row_index + 1)
-                    self.select_side(self.comment_side)
+                    if self.selection_anchor is None:
+                        self.select_side(self.comment_side)
             elif key in (ord("k"), curses.KEY_UP):
                 if self.focus == "files" and self.files:
                     self.file_index = max(0, self.file_index - 1)
                     self.load_diff()
                 elif self.rows:
                     self.row_index = max(0, self.row_index - 1)
-                    self.select_side(self.comment_side)
+                    if self.selection_anchor is None:
+                        self.select_side(self.comment_side)
             elif key in (ord("h"), curses.KEY_LEFT) and self.focus == "diff":
                 self.horizontal_scroll = max(0, self.horizontal_scroll - 8)
             elif key in (ord("l"), curses.KEY_RIGHT) and self.focus == "diff":
@@ -680,14 +714,18 @@ class ReviewUI:
             elif key in (10, 13) and self.focus == "files":
                 self.focus = "diff"
             elif key == 27:
-                if self.focus == "diff":
+                if self.selection_anchor is not None:
+                    self.selection_anchor = None
+                elif self.focus == "diff":
                     self.focus = "files"
                 else:
                     return
             elif key in (ord("c"), ord("C")) and self.focus == "diff":
                 self.prompt_comment()
+            elif key == ord("V") and self.focus == "diff":
+                self.selection_anchor = self.row_index if self.selection_anchor is None else None
             elif key == ord("y") and self.focus == "diff":
-                self.copy_selected_line()
+                self.copy_selected_lines()
             elif key == ord("x") and self.focus == "diff":
                 self.delete_comment()
             elif key == ord("v"):

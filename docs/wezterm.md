@@ -85,7 +85,8 @@ by a chezmoi `run_onchange` script when its lockfile changes.
 | `h` / `l` or left/right | Scroll long diff lines horizontally |
 | `c` | Open the multiline comment editor below the visible diff for the selected side |
 | `Shift+Enter` while commenting | Insert a newline (`Enter` submits; `Esc` cancels) |
-| `y` | Copy the selected before/after code line to the macOS clipboard |
+| `V`, then `j` / `k` | Start line selection and extend the range |
+| `y` | Copy the current line or selected range to the macOS clipboard |
 | `x` | Remove the comment on the selected line |
 | `v` | View all review comments |
 | `?` | Show the keyboard help |
