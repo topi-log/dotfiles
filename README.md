@@ -26,6 +26,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/wezterm/wlay` | 実ファイル（実行可能） |
 | `~/.config/scripts/wlay` | symlink（`wezterm/wlay` を指す） |
 | `~/.config/scripts/cst` | 実ファイル（実行可能） |
+| `~/.config/scripts/creview` | 実ファイル（実行可能） |
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
 | `~/.config/gh/config.yml` | symlink |
@@ -51,7 +52,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 ## セットアップ（新マシン）
 
 ```sh
-brew install chezmoi jq
+brew install chezmoi jq pygments
 git clone git@github.com:topi-log/dotfiles.git ~/workspace/dotfiles
 ```
 

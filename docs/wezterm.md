@@ -16,7 +16,8 @@ WezTerm terminal configuration for macOS.
 | Key | Action |
 |---|---|
 | `Cmd+/` | Show the shortcut list |
-| `Cmd+Shift+Space` | Open the current directory in Visual Studio Code |
+| `Cmd+Shift+Space` | Open the current project in Visual Studio Code (Git root, or the current directory outside Git) |
+| `Cmd+Shift+R` | Review the current project's changes in a dedicated full-screen tab |
 | `Cmd+;` | List Claude Code sessions; pick one to jump to its pane |
 | `Cmd+W` | Close pane |
 | `Cmd+,` | Split vertically |
@@ -56,9 +57,41 @@ original pane.
 |---|---|
 | `wlay` / `wlay sh` | Open zsh |
 | `wlay git` | Open lazygit |
+| `wlay review` | Open the read-only Claude review UI from a regular shell |
+| `wlay diff` | Show all tracked working-tree changes in a full-screen pane (`git diff HEAD`) |
 
-Any argument other than the subcommands (`sh`, `git`) is executed as-is
+Any argument other than the subcommands (`sh`, `git`, `review`, `diff`) is executed as-is
 (e.g. `wlay htop`).
+
+`Cmd+Shift+R` opens `creview` in a temporary full-screen tab. It is a read-only
+UI intended for reviewing Claude Code's work. It compares HEAD with the current working tree, combining staged,
+unstaged, untracked and deleted files into one list. Selecting a file previews
+its before/after contents side by side. It never fetches or changes Git state.
+Closing or sending the review returns to the original Claude Code tab.
+Source code is syntax-highlighted with Pygments, installed with Homebrew. The
+viewer automatically finds Homebrew's isolated Pygments Python environment on
+both Apple Silicon and Intel Macs.
+
+| Key | Action |
+|---|---|
+| `j` / `k` or arrows | Move through files or diff lines |
+| `Tab` / `Enter` | Focus the diff; `Esc` returns to the file list |
+| `h` / `l` or left/right | Scroll long diff lines horizontally |
+| `c` | Add or replace a review comment; `Esc` cancels input |
+| `x` | Remove the comment on the selected line |
+| `v` | View all review comments |
+| `?` | Show the keyboard help |
+| `S` | Put all comments into the original Claude Code prompt as a draft, then close |
+| `q` | Close without sending |
+
+`wlay review` provides the same view from a regular interactive shell. Do not
+type it into Claude Code's prompt because Claude's shell tools do not provide
+the interactive terminal required by a TUI.
+
+`wlay diff` runs from the Git worktree root, even when invoked from a
+subdirectory. Pass paths or regular `git diff` options after it to narrow the
+view (for example, `wlay diff -- README.md`). Quit the pager with `q`; the
+temporary pane then closes and the original pane is restored.
 
 ### Setup
 

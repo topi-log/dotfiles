@@ -3,6 +3,12 @@
 
 set -euo pipefail
 
+# Finder-launched WezTerm may not inherit Homebrew's PATH.
+case ":$PATH:" in
+  *:/opt/homebrew/bin:*) ;;
+  *) PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" ;;
+esac
+
 if [ -z "${WEZTERM_PANE:-}" ]; then
   echo "Error: not running inside WezTerm" >&2
   exit 1
@@ -20,6 +26,28 @@ fi
 case "${1:-sh}" in
   sh)  set -- zsh ;;
   git) shift; set -- lazygit "$@" ;;
+  review)
+    shift
+    if [ ! -x "$HOME/.config/scripts/creview" ]; then
+      echo "Error: creview is not installed (run chezmoi apply)" >&2
+      exit 1
+    fi
+    if ! project_dir=$(git rev-parse --show-toplevel 2>/dev/null); then
+      echo "Error: not inside a Git repository" >&2
+      exit 1
+    fi
+    cd "$project_dir"
+    set -- "$HOME/.config/scripts/creview" --root "$project_dir" --claude-pane "$WEZTERM_PANE" "$@"
+    ;;
+  diff)
+    shift
+    if ! project_dir=$(git rev-parse --show-toplevel 2>/dev/null); then
+      echo "Error: not inside a Git repository" >&2
+      exit 1
+    fi
+    cd "$project_dir"
+    set -- git -c color.ui=always diff --no-ext-diff HEAD "$@"
+    ;;
 esac
 
 pane_id=$("$WEZTERM_BIN" cli split-pane --bottom --cwd "$(pwd)" -- "$@")

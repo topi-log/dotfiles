@@ -1,0 +1,522 @@
+#!/usr/bin/env python3
+"""Read-only terminal UI for reviewing local Git changes with Claude Code."""
+
+import argparse
+import curses
+import difflib
+import os
+import subprocess
+import sys
+import unicodedata
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
+
+try:
+    from pygments import lex
+    from pygments.lexers import get_lexer_for_filename
+    from pygments.token import Comment as TokenComment
+    from pygments.token import Keyword, Name, Number, String
+except ImportError:
+    # Homebrew keeps Pygments in an isolated Python environment. Restart with
+    # that interpreter when this executable was launched by system Python.
+    for python in (
+        "/opt/homebrew/opt/pygments/libexec/bin/python",
+        "/usr/local/opt/pygments/libexec/bin/python",
+    ):
+        if os.path.isfile(python) and os.access(python, os.X_OK):
+            os.execv(python, [python, os.path.abspath(__file__), *sys.argv[1:]])
+    lex = None
+    get_lexer_for_filename = None
+    TokenComment = Keyword = Name = Number = String = None
+
+
+@dataclass
+class ChangedFile:
+    status: str
+    path: str
+    old_path: Optional[str] = None
+
+
+@dataclass
+class DiffRow:
+    old_no: Optional[int]
+    old_text: str
+    new_no: Optional[int]
+    new_text: str
+    kind: str  # equal, add, delete, change
+
+
+@dataclass
+class Comment:
+    path: str
+    side: str
+    line: int
+    text: str
+
+
+def git(root: str, *args: str, check: bool = True) -> bytes:
+    result = subprocess.run(
+        ["git", "-C", root, *args],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if check and result.returncode != 0:
+        raise RuntimeError(result.stderr.decode("utf-8", "replace").strip())
+    return result.stdout
+
+
+def changed_files(root: str) -> List[ChangedFile]:
+    raw = git(root, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+    fields = raw.decode("utf-8", "surrogateescape").split("\0")
+    result: List[ChangedFile] = []
+    i = 0
+    while i < len(fields) and fields[i]:
+        entry = fields[i]
+        status = entry[:2]
+        path = entry[3:]
+        old_path = None
+        if "R" in status or "C" in status:
+            i += 1
+            if i < len(fields):
+                old_path = fields[i]
+        result.append(ChangedFile(status=status, path=path, old_path=old_path))
+        i += 1
+    return result
+
+
+def decode_file(data: bytes) -> Tuple[List[str], bool]:
+    if b"\0" in data:
+        return ["(binary file)"], True
+    return data.decode("utf-8", "replace").splitlines(), False
+
+
+def file_versions(root: str, item: ChangedFile) -> Tuple[List[str], List[str], bool]:
+    head_path = item.old_path or item.path
+    old_raw = git(root, "show", "HEAD:" + head_path, check=False)
+    target = os.path.join(root, item.path)
+    try:
+        with open(target, "rb") as handle:
+            new_raw = handle.read()
+    except (FileNotFoundError, IsADirectoryError):
+        new_raw = b""
+    old_lines, old_binary = decode_file(old_raw)
+    new_lines, new_binary = decode_file(new_raw)
+    return old_lines, new_lines, old_binary or new_binary
+
+
+def side_by_side(old: List[str], new: List[str]) -> List[DiffRow]:
+    rows: List[DiffRow] = []
+    matcher = difflib.SequenceMatcher(None, old, new, autojunk=False)
+    for tag, a1, a2, b1, b2 in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(a2 - a1):
+                rows.append(DiffRow(a1 + offset + 1, old[a1 + offset], b1 + offset + 1, new[b1 + offset], "equal"))
+        elif tag == "delete":
+            for index in range(a1, a2):
+                rows.append(DiffRow(index + 1, old[index], None, "", "delete"))
+        elif tag == "insert":
+            for index in range(b1, b2):
+                rows.append(DiffRow(None, "", index + 1, new[index], "add"))
+        else:
+            count = max(a2 - a1, b2 - b1)
+            for offset in range(count):
+                oi = a1 + offset
+                ni = b1 + offset
+                rows.append(DiffRow(
+                    oi + 1 if oi < a2 else None,
+                    old[oi] if oi < a2 else "",
+                    ni + 1 if ni < b2 else None,
+                    new[ni] if ni < b2 else "",
+                    "change",
+                ))
+    return rows
+
+
+def display_width(text: str) -> int:
+    return sum(
+        0 if unicodedata.combining(char) else 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        for char in text
+    )
+
+
+def clip(text: str, width: int) -> str:
+    if width <= 0:
+        return ""
+    text = text.replace("\t", "    ")
+    result = []
+    used = 0
+    for char in text:
+        char_width = 0 if unicodedata.combining(char) else 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        if used + char_width > width:
+            break
+        result.append(char)
+        used += char_width
+    return "".join(result)
+
+
+def slice_cells(text: str, start: int, width: int) -> str:
+    """Return a display-cell slice without splitting wide characters."""
+    text = text.replace("\t", "    ")
+    result = []
+    position = 0
+    used = 0
+    for char in text:
+        char_width = 0 if unicodedata.combining(char) else 2 if unicodedata.east_asian_width(char) in ("W", "F") else 1
+        next_position = position + char_width
+        if next_position <= start:
+            position = next_position
+            continue
+        if used + char_width > width:
+            break
+        result.append(char)
+        used += char_width
+        position = next_position
+    return "".join(result)
+
+
+class ReviewUI:
+    def __init__(self, screen, root: str, pane_id: Optional[str]):
+        self.screen = screen
+        self.root = root
+        self.pane_id = pane_id
+        self.files = changed_files(root)
+        self.file_index = 0
+        self.file_scroll = 0
+        self.rows: List[DiffRow] = []
+        self.row_index = 0
+        self.row_scroll = 0
+        self.horizontal_scroll = 0
+        self.focus = "files"
+        self.comments: List[Comment] = []
+        self.lexers = {}
+        self.message = ""
+        self.load_diff()
+
+    def load_diff(self):
+        self.row_index = 0
+        self.row_scroll = 0
+        self.horizontal_scroll = 0
+        if not self.files:
+            self.rows = []
+            return
+        old, new, _ = file_versions(self.root, self.files[self.file_index])
+        self.rows = side_by_side(old, new)
+
+    def add(self, y: int, x: int, text: str, attr=0):
+        height, width = self.screen.getmaxyx()
+        if 0 <= y < height and 0 <= x < width:
+            try:
+                self.screen.addstr(y, x, clip(text, width - x - 1), attr)
+            except curses.error:
+                pass
+
+    def color(self, pair: int, selected: bool = False):
+        attr = curses.color_pair(pair)
+        if selected:
+            attr |= curses.A_REVERSE
+        return attr
+
+    def lexer_for(self, path: str):
+        if path not in self.lexers:
+            try:
+                self.lexers[path] = get_lexer_for_filename(path) if get_lexer_for_filename else None
+            except Exception:
+                self.lexers[path] = None
+        return self.lexers[path]
+
+    def syntax_pair(self, token) -> int:
+        if TokenComment is not None and token in TokenComment:
+            return 5
+        if Keyword is not None and token in Keyword:
+            return 6
+        if String is not None and token in String:
+            return 7
+        if Number is not None and token in Number:
+            return 8
+        if Name is not None and (token in Name.Function or token in Name.Builtin or token in Name.Class):
+            return 9
+        return 0
+
+    def draw_code(self, y: int, x: int, text: str, path: str, start: int, width: int, selected: bool):
+        lexer = self.lexer_for(path)
+        tokens = list(lex(text, lexer)) if lexer and lex else [(None, text)]
+        position = 0
+        drawn = 0
+        for token, value in tokens:
+            value = value.rstrip("\n").replace("\t", "    ")
+            visible = slice_cells(value, max(0, start - position), max(0, width - drawn))
+            if visible and position + display_width(value) > start:
+                self.add(y, x + drawn, visible, self.color(self.syntax_pair(token), selected))
+                drawn += display_width(visible)
+            position += display_width(value)
+            if drawn >= width:
+                break
+
+    def draw(self):
+        self.screen.erase()
+        height, width = self.screen.getmaxyx()
+        if height < 8 or width < 70:
+            self.add(0, 0, "Terminal is too small (minimum 70x8)", curses.A_BOLD)
+            self.screen.refresh()
+            return
+
+        list_width = max(24, min(40, width // 4))
+        diff_width = width - list_width - 1
+        half = diff_width // 2
+        body_top = 2
+        body_bottom = height - 2
+        body_height = body_bottom - body_top
+
+        title = " Claude Review — READ ONLY "
+        self.add(0, 0, title, curses.A_BOLD | curses.color_pair(4))
+        self.add(0, display_width(title), os.path.basename(self.root), curses.A_DIM)
+        self.add(1, 0, "Changed files", curses.A_BOLD if self.focus == "files" else curses.A_DIM)
+        offset = f"  horizontal: {self.horizontal_scroll}" if self.horizontal_scroll else ""
+        self.add(1, list_width + 1, "BEFORE" + offset, curses.A_BOLD | curses.color_pair(2))
+        self.add(1, list_width + 1 + half, "AFTER" + offset, curses.A_BOLD | curses.color_pair(1))
+
+        for y in range(1, body_bottom):
+            self.add(y, list_width, "│", curses.A_DIM)
+        for y in range(1, body_bottom):
+            self.add(y, list_width + half, "│", curses.A_DIM)
+
+        if self.file_index < self.file_scroll:
+            self.file_scroll = self.file_index
+        if self.file_index >= self.file_scroll + body_height:
+            self.file_scroll = self.file_index - body_height + 1
+        for offset, item in enumerate(self.files[self.file_scroll:self.file_scroll + body_height]):
+            index = self.file_scroll + offset
+            marker = "A" if item.status == "??" or "A" in item.status else "D" if "D" in item.status else "M"
+            pair = 1 if marker == "A" else 2 if marker == "D" else 3
+            label = f" {marker} {item.path}"
+            selected = self.focus == "files" and index == self.file_index
+            self.add(body_top + offset, 0, clip(label, list_width), self.color(pair, selected))
+
+        if self.row_index < self.row_scroll:
+            self.row_scroll = self.row_index
+        if self.row_index >= self.row_scroll + body_height:
+            self.row_scroll = self.row_index - body_height + 1
+        comment_keys = {(c.path, c.side, c.line) for c in self.comments}
+        current_path = self.files[self.file_index].path if self.files else ""
+        content_width = half - 7
+        for offset, row in enumerate(self.rows[self.row_scroll:self.row_scroll + body_height]):
+            index = self.row_scroll + offset
+            selected = self.focus == "diff" and index == self.row_index
+            old_mark = "●" if row.old_no and (current_path, "before", row.old_no) in comment_keys else "-" if row.kind in ("delete", "change") else " "
+            new_mark = "●" if row.new_no and (current_path, "after", row.new_no) in comment_keys else "+" if row.kind in ("add", "change") else " "
+            old_prefix = f"{old_mark}{row.old_no or '':>4} "
+            new_prefix = f"{new_mark}{row.new_no or '':>4} "
+            old_pair = 2 if row.kind in ("delete", "change") else 0
+            new_pair = 1 if row.kind in ("add", "change") else 0
+            y = body_top + offset
+            self.add(y, list_width + 1, old_prefix, self.color(old_pair, selected))
+            self.add(y, list_width + half + 1, new_prefix, self.color(new_pair, selected))
+            self.draw_code(y, list_width + 1 + 6, row.old_text, current_path, self.horizontal_scroll, content_width, selected)
+            self.draw_code(y, list_width + half + 1 + 6, row.new_text, current_path, self.horizontal_scroll, content_width, selected)
+
+        help_text = "j/k: move  h/l: horizontal  c: comment  v: comments  ?: help  S: send"
+        selected_comment = self.comment_at_cursor()
+        if selected_comment and not self.message:
+            help_text = "Comment: " + selected_comment.text
+        if self.message:
+            help_text = self.message
+        self.add(height - 1, 0, clip(help_text, width - 1), curses.A_REVERSE)
+        self.add(height - 1, max(0, width - 16), f"{len(self.comments)} comments ", curses.A_REVERSE | curses.A_BOLD)
+        self.screen.refresh()
+
+    def comment_location(self) -> Optional[Tuple[str, str, int]]:
+        if not self.files or not self.rows:
+            return None
+        row = self.rows[self.row_index]
+        side = "after" if row.new_no is not None else "before"
+        line = row.new_no if row.new_no is not None else row.old_no
+        if line is None:
+            return None
+        return self.files[self.file_index].path, side, line
+
+    def comment_at_cursor(self) -> Optional[Comment]:
+        location = self.comment_location()
+        if location is None:
+            return None
+        return next((comment for comment in self.comments if (comment.path, comment.side, comment.line) == location), None)
+
+    def input_line(self, prompt: str) -> Optional[str]:
+        height, width = self.screen.getmaxyx()
+        curses.curs_set(1)
+        value = ""
+        try:
+            while True:
+                self.screen.move(height - 1, 0)
+                self.screen.clrtoeol()
+                available = max(1, width - display_width(prompt) - 2)
+                visible = slice_cells(value, max(0, display_width(value) - available), available)
+                self.add(height - 1, 0, prompt + visible, curses.A_REVERSE)
+                cursor_x = min(width - 2, display_width(prompt) + display_width(visible))
+                self.screen.move(height - 1, cursor_x)
+                self.screen.refresh()
+                key = self.screen.get_wch()
+                if key == "\x1b":
+                    return None
+                if key in ("\n", "\r"):
+                    return value.strip()
+                if key in (curses.KEY_BACKSPACE, "\b", "\x7f"):
+                    value = value[:-1]
+                elif isinstance(key, str) and key.isprintable():
+                    value += key
+        finally:
+            curses.curs_set(0)
+
+    def prompt_comment(self):
+        location = self.comment_location()
+        if location is None:
+            return
+        path, side, line = location
+        existing = self.comment_at_cursor()
+        prompt = f"Comment on {path}:{line} (Esc cancels): "
+        text = self.input_line(prompt)
+        if text is None:
+            self.message = "Comment cancelled"
+            return
+        if text:
+            if existing:
+                existing.text = text
+            else:
+                self.comments.append(Comment(path, side, line, text))
+            self.message = "Comment added"
+
+    def delete_comment(self):
+        comment = self.comment_at_cursor()
+        if not comment:
+            self.message = "No comment on this line"
+            return
+        self.comments.remove(comment)
+        self.message = "Comment removed"
+
+    def show_page(self, title: str, lines: List[str]):
+        self.screen.erase()
+        height, width = self.screen.getmaxyx()
+        self.add(0, 0, f" {title} ", curses.A_BOLD | curses.color_pair(4))
+        for index, line in enumerate(lines[:height - 3]):
+            self.add(index + 2, 2, clip(line, width - 4))
+        self.add(height - 1, 0, "Press Esc, q, or any key to return", curses.A_REVERSE)
+        self.screen.refresh()
+        self.screen.getch()
+
+    def show_help(self):
+        self.show_page("操作ヘルプ", [
+            "j / k または ↑ / ↓   ファイル・diff行を移動",
+            "Tab / Enter           左右diffへフォーカスを移動",
+            "Esc                   ファイル一覧へ戻る／コメント入力を中止",
+            "h / l または ← / →   長い行を横スクロール",
+            "c                     選択行にコメントを追加・上書き",
+            "x                     選択行のコメントを削除",
+            "v                     追加済みコメントを一覧表示",
+            "S                     コメントをClaude Codeへ下書き転送",
+            "q                     転送せずレビューを終了",
+            "",
+            "この画面は読み取り専用です。ファイルやGitの状態は変更しません。",
+        ])
+
+    def show_comments(self):
+        lines = []
+        for index, comment in enumerate(self.comments, 1):
+            label = "after" if comment.side == "after" else "before"
+            lines.append(f"{index}. {comment.path}:{comment.line} ({label})")
+            lines.append(f"   {comment.text}")
+        if not lines:
+            lines = ["No review comments yet."]
+        self.show_page(f"Review comments ({len(self.comments)})", lines)
+
+    def send_draft(self) -> bool:
+        if not self.comments:
+            self.message = "No review comments yet"
+            return False
+        if not self.pane_id:
+            self.message = "No Claude Code pane was supplied"
+            return False
+        lines = ["以下のレビューコメントに対応してください。", ""]
+        for comment in self.comments:
+            label = "変更後" if comment.side == "after" else "変更前"
+            lines.append(f"- {comment.path}:{comment.line}（{label}）: {comment.text}")
+        message = "\n".join(lines)
+        wezterm = "/Applications/WezTerm.app/Contents/MacOS/wezterm"
+        result = subprocess.run([wezterm, "cli", "send-text", "--pane-id", self.pane_id, message])
+        if result.returncode != 0:
+            self.message = "Could not send the review draft"
+            return False
+        return True
+
+    def run(self):
+        curses.curs_set(0)
+        self.screen.keypad(True)
+        while True:
+            self.draw()
+            key = self.screen.getch()
+            self.message = ""
+            if key in (ord("q"), ord("Q")):
+                return
+            if key == 9:
+                self.focus = "diff" if self.focus == "files" else "files"
+            elif key in (ord("j"), curses.KEY_DOWN):
+                if self.focus == "files" and self.files:
+                    self.file_index = min(len(self.files) - 1, self.file_index + 1)
+                    self.load_diff()
+                elif self.rows:
+                    self.row_index = min(len(self.rows) - 1, self.row_index + 1)
+            elif key in (ord("k"), curses.KEY_UP):
+                if self.focus == "files" and self.files:
+                    self.file_index = max(0, self.file_index - 1)
+                    self.load_diff()
+                elif self.rows:
+                    self.row_index = max(0, self.row_index - 1)
+            elif key in (ord("h"), curses.KEY_LEFT) and self.focus == "diff":
+                self.horizontal_scroll = max(0, self.horizontal_scroll - 8)
+            elif key in (ord("l"), curses.KEY_RIGHT) and self.focus == "diff":
+                self.horizontal_scroll += 8
+            elif key in (10, 13) and self.focus == "files":
+                self.focus = "diff"
+            elif key == 27:
+                self.focus = "files"
+            elif key in (ord("c"), ord("C")) and self.focus == "diff":
+                self.prompt_comment()
+            elif key == ord("x") and self.focus == "diff":
+                self.delete_comment()
+            elif key == ord("v"):
+                self.show_comments()
+            elif key == ord("?"):
+                self.show_help()
+            elif key == ord("S"):
+                if self.send_draft():
+                    return
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", required=True)
+    parser.add_argument("--claude-pane")
+    args = parser.parse_args()
+
+    def wrapped(screen):
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_GREEN, -1)
+        curses.init_pair(2, curses.COLOR_RED, -1)
+        curses.init_pair(3, curses.COLOR_YELLOW, -1)
+        curses.init_pair(4, curses.COLOR_CYAN, -1)
+        curses.init_pair(5, curses.COLOR_CYAN, -1)
+        curses.init_pair(6, curses.COLOR_MAGENTA, -1)
+        curses.init_pair(7, curses.COLOR_YELLOW, -1)
+        curses.init_pair(8, curses.COLOR_CYAN, -1)
+        curses.init_pair(9, curses.COLOR_BLUE, -1)
+        ReviewUI(screen, args.root, args.claude_pane).run()
+
+    try:
+        curses.wrapper(wrapped)
+    except RuntimeError as error:
+        print(f"creview: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

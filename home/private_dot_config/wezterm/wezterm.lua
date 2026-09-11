@@ -42,7 +42,22 @@ end)
 
 -- Claude Code sessions (see docs/wezterm.md, "cst")
 local cst = wezterm.home_dir .. "/.config/scripts/cst"
+local creview = wezterm.home_dir .. "/.config/scripts/creview"
 local state_labels = { busy = "作業中  ", waiting = "許可待ち", idle = "入力待ち" }
+
+local function project_dir(pane)
+	local cwd_uri = pane:get_current_working_dir()
+	if not cwd_uri then
+		return nil
+	end
+
+	local cwd = cwd_uri.file_path
+	local ok, stdout = wezterm.run_child_process({ "git", "-C", cwd, "rev-parse", "--show-toplevel" })
+	if ok then
+		return stdout:gsub("%s+$", "")
+	end
+	return cwd
+end
 
 local function truncate_utf8(s, max_chars)
 	if utf8.len(s) and utf8.len(s) > max_chars then
@@ -85,7 +100,9 @@ config.keys = {
 			title = "WezTerm ショートカット",
 			description = "Escで閉じる",
 			choices = {
-				{ label = "Cmd+Shift+Space   現在のディレクトリをVS Codeで開く" },
+				{ label = "Cmd+Shift+Space   現在のプロジェクトをVS Codeで開く" },
+				{ label = "Cmd+Shift+R       変更ファイルを全画面でレビュー" },
+				{ label = "wlay diff          Git差分をテキストで開く" },
 				{ label = "Cmd+;             Claude Code セッション一覧（選択でペインへ移動）" },
 				{ label = "Cmd+W             現在のペインを閉じる" },
 				{ label = "Cmd+,             ペインを縦分割" },
@@ -101,14 +118,32 @@ config.keys = {
 		key = "Space",
 		mods = "CMD|SHIFT",
 		action = wezterm.action_callback(function(window, pane)
-			local cwd_uri = pane:get_current_working_dir()
-			if not cwd_uri then
+			local cwd = project_dir(pane)
+			if not cwd then
 				window:toast_notification("WezTerm", "Could not detect the current directory", nil, 3000)
 				return
 			end
 
-			local cwd = cwd_uri.file_path
 			wezterm.background_child_process({ "/usr/bin/open", "-a", "Visual Studio Code", cwd })
+		end),
+	},
+	{
+		key = "r",
+		mods = "CMD|SHIFT",
+		action = wezterm.action_callback(function(window, pane)
+			local cwd = project_dir(pane)
+			if not cwd then
+				window:toast_notification("WezTerm", "Could not detect the current directory", nil, 3000)
+				return
+			end
+
+			window:perform_action(
+				act.SpawnCommandInNewTab({
+					args = { creview, "--root", cwd, "--claude-pane", tostring(pane:pane_id()) },
+					cwd = cwd,
+				}),
+				pane
+			)
 		end),
 	},
 	{
