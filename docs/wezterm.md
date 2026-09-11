@@ -71,8 +71,8 @@ its before/after contents side by side. It never fetches or changes Git state.
 Closing or sending the review returns to the original Claude Code tab.
 Source code is syntax-highlighted with Pygments, installed with Homebrew. The
 viewer automatically finds Homebrew's isolated Pygments Python environment on
-both Apple Silicon and Intel Macs. Its 256-color token palette approximates VS
-Code Dark+ and falls back to the terminal's basic colors when needed.
+both Apple Silicon and Intel Macs. In WezTerm it defines the VS Code Dark+ RGB
+token colors directly; other terminals fall back to their 256 or basic colors.
 
 | Key | Action |
 |---|---|

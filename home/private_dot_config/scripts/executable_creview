@@ -271,7 +271,7 @@ class ReviewUI:
         body_bottom = height - 2
         body_height = body_bottom - body_top
 
-        title = " Claude Review — READ ONLY "
+        title = " Claude Review — READ ONLY · DARK+ "
         self.add(0, 0, title, curses.A_BOLD | curses.color_pair(4))
         self.add(0, display_width(title), os.path.basename(self.root), curses.A_DIM)
         self.add(1, 0, "Changed files", curses.A_BOLD if self.focus == "files" else curses.A_DIM)
@@ -503,21 +503,36 @@ def main():
     def wrapped(screen):
         curses.start_color()
         curses.use_default_colors()
-        if curses.COLORS >= 256:
-            # Closest xterm-256 approximations of VS Code's Dark+ palette.
+        if curses.COLORS >= 256 and curses.can_change_color():
+            # Define VS Code Dark+ RGB values directly in private palette slots.
+            dark_plus = {
+                16: (212, 212, 212), # text      #D4D4D4
+                17: (106, 153, 85),  # comment   #6A9955
+                18: (197, 134, 192), # keyword   #C586C0
+                19: (206, 145, 120), # string    #CE9178
+                20: (181, 206, 168), # number    #B5CEA8
+                21: (220, 220, 170), # function  #DCDCAA
+                22: (78, 201, 176),  # type      #4EC9B0
+                23: (156, 220, 254), # builtin   #9CDCFE
+                24: (106, 153, 85),  # added
+                25: (209, 105, 105), # deleted
+                26: (220, 220, 170), # modified
+            }
+            for slot, (red, green, blue) in dark_plus.items():
+                curses.init_color(slot, round(red * 1000 / 255), round(green * 1000 / 255), round(blue * 1000 / 255))
             colors = {
-                1: 71,   # added:   #6A9955
-                2: 167,  # deleted: #D16969
-                3: 179,  # modified
-                4: 80,   # accent:  #4EC9B0
-                5: 65,   # comment: #6A9955
-                6: 176,  # keyword: #C586C0
-                7: 180,  # string:  #CE9178
-                8: 151,  # number:  #B5CEA8
-                9: 187,  # function:#DCDCAA
-                10: 80,  # type:    #4EC9B0
-                11: 117, # builtin: #9CDCFE
-                12: 252, # text:    #D4D4D4
+                1: 24,
+                2: 25,
+                3: 26,
+                4: 22,
+                5: 17,
+                6: 18,
+                7: 19,
+                8: 20,
+                9: 21,
+                10: 22,
+                11: 23,
+                12: 16,
             }
         else:
             colors = {
