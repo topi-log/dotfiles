@@ -233,9 +233,13 @@ class ReviewUI:
             return 7
         if Number is not None and token in Number:
             return 8
-        if Name is not None and (token in Name.Function or token in Name.Builtin or token in Name.Class):
+        if Name is not None and token in Name.Function:
             return 9
-        return 0
+        if Name is not None and (token in Name.Class or token in Name.Namespace or token in Name.Decorator):
+            return 10
+        if Name is not None and token in Name.Builtin:
+            return 11
+        return 12
 
     def draw_code(self, y: int, x: int, text: str, path: str, start: int, width: int, selected: bool):
         lexer = self.lexer_for(path)
@@ -499,15 +503,39 @@ def main():
     def wrapped(screen):
         curses.start_color()
         curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_GREEN, -1)
-        curses.init_pair(2, curses.COLOR_RED, -1)
-        curses.init_pair(3, curses.COLOR_YELLOW, -1)
-        curses.init_pair(4, curses.COLOR_CYAN, -1)
-        curses.init_pair(5, curses.COLOR_CYAN, -1)
-        curses.init_pair(6, curses.COLOR_MAGENTA, -1)
-        curses.init_pair(7, curses.COLOR_YELLOW, -1)
-        curses.init_pair(8, curses.COLOR_CYAN, -1)
-        curses.init_pair(9, curses.COLOR_BLUE, -1)
+        if curses.COLORS >= 256:
+            # Closest xterm-256 approximations of VS Code's Dark+ palette.
+            colors = {
+                1: 71,   # added:   #6A9955
+                2: 167,  # deleted: #D16969
+                3: 179,  # modified
+                4: 80,   # accent:  #4EC9B0
+                5: 65,   # comment: #6A9955
+                6: 176,  # keyword: #C586C0
+                7: 180,  # string:  #CE9178
+                8: 151,  # number:  #B5CEA8
+                9: 187,  # function:#DCDCAA
+                10: 80,  # type:    #4EC9B0
+                11: 117, # builtin: #9CDCFE
+                12: 252, # text:    #D4D4D4
+            }
+        else:
+            colors = {
+                1: curses.COLOR_GREEN,
+                2: curses.COLOR_RED,
+                3: curses.COLOR_YELLOW,
+                4: curses.COLOR_CYAN,
+                5: curses.COLOR_GREEN,
+                6: curses.COLOR_MAGENTA,
+                7: curses.COLOR_YELLOW,
+                8: curses.COLOR_CYAN,
+                9: curses.COLOR_YELLOW,
+                10: curses.COLOR_CYAN,
+                11: curses.COLOR_BLUE,
+                12: -1,
+            }
+        for pair, foreground in colors.items():
+            curses.init_pair(pair, foreground, -1)
         ReviewUI(screen, args.root, args.claude_pane).run()
 
     try:
