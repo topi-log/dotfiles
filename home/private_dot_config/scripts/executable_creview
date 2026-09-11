@@ -475,7 +475,7 @@ class ReviewUI:
                     self.add(y, list_width + half + 2, clip(after_lines[comment_offset], half - 3), curses.A_BOLD | curses.color_pair(3))
                 y += 1
 
-        help_text = "j/k: move  [/] side  n/N: hunk  c: comment  ?: help  S: send"
+        help_text = "j/k: move  [/] side  n/N: hunk  c: comment  y: copy  ?: help  S: send"
         selected_comment = self.comment_at_cursor()
         if selected_comment and not self.message:
             help_text = "Comment: " + selected_comment.text
@@ -569,6 +569,19 @@ class ReviewUI:
         self.comments.remove(comment)
         self.message = "Comment removed"
 
+    def copy_selected_line(self):
+        if not self.rows:
+            return
+        self.select_side(self.comment_side)
+        row = self.rows[self.row_index]
+        text = row.old_text if self.comment_side == "before" else row.new_text
+        result = subprocess.run(["/usr/bin/pbcopy"], input=text.encode("utf-8"))
+        if result.returncode == 0:
+            label = "BEFORE" if self.comment_side == "before" else "AFTER"
+            self.message = f"Copied {label} line"
+        else:
+            self.message = "Could not copy line"
+
     def show_page(self, title: str, lines: List[str]):
         self.screen.erase()
         height, width = self.screen.getmaxyx()
@@ -590,6 +603,7 @@ class ReviewUI:
             "n / N                 次／前の変更ブロックへジャンプ",
             "c                     選択側の行にコメントを追加・上書き",
             "  入力中: Shift+Enter コメント内で改行（Enterは確定）",
+            "y                     選択側のコード1行をコピー",
             "x                     選択行のコメントを削除",
             "v                     追加済みコメントを一覧表示",
             "S                     コメントをClaude Codeへ下書き転送",
@@ -672,6 +686,8 @@ class ReviewUI:
                     return
             elif key in (ord("c"), ord("C")) and self.focus == "diff":
                 self.prompt_comment()
+            elif key == ord("y") and self.focus == "diff":
+                self.copy_selected_line()
             elif key == ord("x") and self.focus == "diff":
                 self.delete_comment()
             elif key == ord("v"):
