@@ -43,7 +43,6 @@ end)
 -- Claude Code sessions (see docs/wezterm.md, "cst")
 local cst = wezterm.home_dir .. "/.config/scripts/cst"
 local creview = wezterm.home_dir .. "/.config/scripts/creview"
-local creview_code = wezterm.home_dir .. "/.config/scripts/creview-code"
 local state_labels = { busy = "作業中  ", waiting = "許可待ち", idle = "入力待ち" }
 
 local function project_dir(pane)
@@ -103,7 +102,6 @@ config.keys = {
 			choices = {
 				{ label = "Cmd+Shift+Space   現在のプロジェクトをVS Codeで開く" },
 				{ label = "Cmd+Shift+R       変更ファイルを全画面でレビュー" },
-				{ label = "Cmd+Shift+D       VS Codeで変更をレビュー" },
 				{ label = "wlay diff          Git差分をテキストで開く" },
 				{ label = "Cmd+;             Claude Code セッション一覧（選択でペインへ移動）" },
 				{ label = "Cmd+W             現在のペインを閉じる" },
@@ -127,25 +125,6 @@ config.keys = {
 			end
 
 			wezterm.background_child_process({ "/usr/bin/open", "-a", "Visual Studio Code", cwd })
-		end),
-	},
-	{
-		key = "d",
-		mods = "CMD|SHIFT",
-		action = wezterm.action_callback(function(window, pane)
-			local cwd = project_dir(pane)
-			if not cwd then
-				window:toast_notification("WezTerm", "Could not detect the current directory", nil, 3000)
-				return
-			end
-
-			wezterm.background_child_process({
-				creview_code,
-				"--root",
-				cwd,
-				"--claude-pane",
-				tostring(pane:pane_id()),
-			})
 		end),
 	},
 	{
