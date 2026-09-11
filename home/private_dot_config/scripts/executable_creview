@@ -502,9 +502,9 @@ class ReviewUI:
                 key = self.screen.get_wch()
                 if key == "\x1b":
                     return None
-                if key in ("\n", "\r"):
+                if key in ("\r", curses.KEY_ENTER):
                     return value.strip()
-                if key == "\x0e":  # Ctrl+N: insert a newline without submitting
+                if key == "\n":  # WezTerm maps Shift+Enter to LF; Enter remains CR.
                     value += "\n"
                 if key in (curses.KEY_BACKSPACE, "\b", "\x7f"):
                     value = value[:-1]
@@ -520,7 +520,7 @@ class ReviewUI:
         path, side, line = location
         existing = self.comment_at_cursor()
         label = "BEFORE" if side == "before" else "AFTER"
-        prompt = f"Comment on {label} {path}:{line} (Ctrl+N newline): "
+        prompt = f"Comment on {label} {path}:{line} (Shift+Enter newline): "
         text = self.input_line(prompt)
         if text is None:
             self.message = "Comment cancelled"
@@ -546,24 +546,24 @@ class ReviewUI:
         self.add(0, 0, f" {title} ", curses.A_BOLD | curses.color_pair(4))
         for index, line in enumerate(lines[:height - 3]):
             self.add(index + 2, 2, clip(line, width - 4))
-        self.add(height - 1, 0, "Press Esc, q, or any key to return", curses.A_REVERSE)
+        self.add(height - 1, 0, "Escで戻る", curses.A_REVERSE)
         self.screen.refresh()
-        self.screen.getch()
+        while self.screen.getch() != 27:
+            pass
 
     def show_help(self):
         self.show_page("操作ヘルプ", [
             "j / k または ↑ / ↓   ファイル・diff行を移動",
             "Tab / Enter           左右diffへフォーカスを移動",
-            "Esc                   ファイル一覧へ戻る／コメント入力を中止",
+            "Esc                   キャンセル／戻る／終了",
             "[ / ]                 コメント対象を変更前／変更後へ切替",
             "h / l または ← / →   長い行を横スクロール",
             "n / N                 次／前の変更ブロックへジャンプ",
             "c                     選択側の行にコメントを追加・上書き",
-            "  入力中: Ctrl+N      コメント内で改行（Enterは確定）",
+            "  入力中: Shift+Enter コメント内で改行（Enterは確定）",
             "x                     選択行のコメントを削除",
             "v                     追加済みコメントを一覧表示",
             "S                     コメントをClaude Codeへ下書き転送",
-            "q                     転送せずレビューを終了",
             "",
             "この画面は読み取り専用です。ファイルやGitの状態は変更しません。",
         ])
@@ -599,14 +599,13 @@ class ReviewUI:
         return True
 
     def run(self):
+        curses.nonl()
         curses.curs_set(0)
         self.screen.keypad(True)
         while True:
             self.draw()
             key = self.screen.getch()
             self.message = ""
-            if key in (ord("q"), ord("Q")):
-                return
             if key == 9:
                 self.focus = "diff" if self.focus == "files" else "files"
             elif key in (ord("j"), curses.KEY_DOWN):
@@ -638,7 +637,10 @@ class ReviewUI:
             elif key in (10, 13) and self.focus == "files":
                 self.focus = "diff"
             elif key == 27:
-                self.focus = "files"
+                if self.focus == "diff":
+                    self.focus = "files"
+                else:
+                    return
             elif key in (ord("c"), ord("C")) and self.focus == "diff":
                 self.prompt_comment()
             elif key == ord("x") and self.focus == "diff":

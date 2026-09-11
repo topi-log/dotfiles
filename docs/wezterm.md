@@ -84,12 +84,12 @@ by a chezmoi `run_onchange` script when its lockfile changes.
 | `n` / `N` | Jump to the next/previous change hunk (wraps at the end) |
 | `h` / `l` or left/right | Scroll long diff lines horizontally |
 | `c` | Add or replace a review comment on the selected side, shown below its line |
-| `Ctrl+N` while commenting | Insert a newline (`Enter` submits; `Esc` cancels) |
+| `Shift+Enter` while commenting | Insert a newline (`Enter` submits; `Esc` cancels) |
 | `x` | Remove the comment on the selected line |
 | `v` | View all review comments |
 | `?` | Show the keyboard help |
 | `S` | Put all comments into the original Claude Code prompt as a draft, then close |
-| `q` | Close without sending |
+| `Esc` | Cancel comment input, return to the file list, or close the review from the file list |
 
 `wlay review` provides the same view from a regular interactive shell. Do not
 type it into Claude Code's prompt because Claude's shell tools do not provide
