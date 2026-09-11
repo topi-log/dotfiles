@@ -1,0 +1,16 @@
+#!/bin/sh
+# package-lock.json: f4867fddcf3298491b1891f6d6c99407c9d437cd958c6f37cba74ae3f6b2c0a4
+
+set -eu
+
+case ":$PATH:" in
+  *:/opt/homebrew/bin:*) ;;
+  *) PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" ;;
+esac
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "creview: Node.js is required (brew install node)" >&2
+  exit 1
+fi
+
+npm ci --prefix "$HOME/.config/creview" --ignore-scripts

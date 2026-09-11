@@ -1,0 +1,10 @@
+{
+  "name": "creview-highlighter",
+  "private": true,
+  "version": "0.1.0",
+  "description": "VS Code TextMate tokenization bridge for creview",
+  "dependencies": {
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.2.1"
+  }
+}

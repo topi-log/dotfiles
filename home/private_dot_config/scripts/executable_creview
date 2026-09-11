@@ -4,30 +4,14 @@
 import argparse
 import curses
 import difflib
+import json
 import os
+import shutil
 import subprocess
 import sys
 import unicodedata
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
-
-try:
-    from pygments import lex
-    from pygments.lexers import get_lexer_for_filename
-    from pygments.token import Comment as TokenComment
-    from pygments.token import Keyword, Name, Number, String
-except ImportError:
-    # Homebrew keeps Pygments in an isolated Python environment. Restart with
-    # that interpreter when this executable was launched by system Python.
-    for python in (
-        "/opt/homebrew/opt/pygments/libexec/bin/python",
-        "/usr/local/opt/pygments/libexec/bin/python",
-    ):
-        if os.path.isfile(python) and os.access(python, os.X_OK):
-            os.execv(python, [python, os.path.abspath(__file__), *sys.argv[1:]])
-    lex = None
-    get_lexer_for_filename = None
-    TokenComment = Keyword = Name = Number = String = None
 
 
 @dataclass
@@ -174,6 +158,27 @@ def slice_cells(text: str, start: int, width: int) -> str:
     return "".join(result)
 
 
+def textmate_highlight(pathname: str, contents: List[List[str]]):
+    node = shutil.which("node")
+    helper = os.path.expanduser("~/.config/creview/highlight.js")
+    if not node or not os.path.isfile(helper):
+        return [[[[line, "#D4D4D4"]] for line in lines] for lines in contents]
+    request = {"path": pathname, "contents": ["\n".join(lines) for lines in contents]}
+    result = subprocess.run(
+        [node, helper],
+        input=json.dumps(request),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if result.returncode != 0:
+        return [[[[line, "#D4D4D4"]] for line in lines] for lines in contents]
+    try:
+        return json.loads(result.stdout)["contents"]
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return [[[[line, "#D4D4D4"]] for line in lines] for lines in contents]
+
+
 class ReviewUI:
     def __init__(self, screen, root: str, pane_id: Optional[str]):
         self.screen = screen
@@ -188,7 +193,10 @@ class ReviewUI:
         self.horizontal_scroll = 0
         self.focus = "files"
         self.comments: List[Comment] = []
-        self.lexers = {}
+        self.old_highlights = []
+        self.new_highlights = []
+        self.theme_pairs = {}
+        self.next_theme_slot = 32
         self.message = ""
         self.load_diff()
 
@@ -201,6 +209,7 @@ class ReviewUI:
             return
         old, new, _ = file_versions(self.root, self.files[self.file_index])
         self.rows = side_by_side(old, new)
+        self.old_highlights, self.new_highlights = textmate_highlight(self.files[self.file_index].path, [old, new])
 
     def add(self, y: int, x: int, text: str, attr=0):
         height, width = self.screen.getmaxyx()
@@ -216,50 +225,30 @@ class ReviewUI:
             attr |= curses.A_REVERSE
         return attr
 
-    def lexer_for(self, path: str):
-        if path not in self.lexers:
-            try:
-                self.lexers[path] = get_lexer_for_filename(path) if get_lexer_for_filename else None
-            except Exception:
-                self.lexers[path] = None
-        return self.lexers[path]
+    def theme_pair(self, color: str) -> int:
+        color = color.upper()
+        if color in self.theme_pairs:
+            return self.theme_pairs[color]
+        if not (curses.COLORS >= 256 and curses.can_change_color() and color.startswith("#") and len(color) == 7):
+            return 12
+        if self.next_theme_slot >= min(curses.COLORS, curses.COLOR_PAIRS):
+            return 12
+        slot = self.next_theme_slot
+        self.next_theme_slot += 1
+        red, green, blue = (int(color[index:index + 2], 16) for index in (1, 3, 5))
+        curses.init_color(slot, round(red * 1000 / 255), round(green * 1000 / 255), round(blue * 1000 / 255))
+        curses.init_pair(slot, slot, -1)
+        self.theme_pairs[color] = slot
+        return slot
 
-    def syntax_pair(self, token, value: str = "", next_text: str = "") -> int:
-        if TokenComment is not None and token in TokenComment:
-            return 5
-        if Keyword is not None and token in Keyword:
-            if token in Keyword.Declaration or token in Keyword.Type or token in Keyword.Namespace:
-                return 13
-            return 6
-        if String is not None and token in String:
-            return 7
-        if Number is not None and token in Number:
-            return 8
-        if Name is not None and token in Name.Function:
-            return 9
-        # Pygments' Go lexer emits declarations, calls, and methods as
-        # Name.Other. VS Code's Go language server identifies callable names
-        # semantically, so approximate that classification from the following
-        # parenthesis for the terminal renderer.
-        if Name is not None and token in Name and value.strip() and next_text.lstrip().startswith("("):
-            return 9
-        if Name is not None and (token in Name.Class or token in Name.Namespace or token in Name.Decorator):
-            return 10
-        if Name is not None and token in Name.Builtin:
-            return 11
-        return 12
-
-    def draw_code(self, y: int, x: int, text: str, path: str, start: int, width: int, selected: bool):
-        lexer = self.lexer_for(path)
-        tokens = list(lex(text, lexer)) if lexer and lex else [(None, text)]
+    def draw_code(self, y: int, x: int, segments, start: int, width: int, selected: bool):
         position = 0
         drawn = 0
-        for index, (token, value) in enumerate(tokens):
+        for value, color in segments:
             value = value.rstrip("\n").replace("\t", "    ")
-            next_text = "".join(part for _, part in tokens[index + 1:] if part.strip())
             visible = slice_cells(value, max(0, start - position), max(0, width - drawn))
             if visible and position + display_width(value) > start:
-                self.add(y, x + drawn, visible, self.color(self.syntax_pair(token, value, next_text), selected))
+                self.add(y, x + drawn, visible, self.color(self.theme_pair(color), selected))
                 drawn += display_width(visible)
             position += display_width(value)
             if drawn >= width:
@@ -324,8 +313,10 @@ class ReviewUI:
             y = body_top + offset
             self.add(y, list_width + 1, old_prefix, self.color(old_pair, selected))
             self.add(y, list_width + half + 1, new_prefix, self.color(new_pair, selected))
-            self.draw_code(y, list_width + 1 + 6, row.old_text, current_path, self.horizontal_scroll, content_width, selected)
-            self.draw_code(y, list_width + half + 1 + 6, row.new_text, current_path, self.horizontal_scroll, content_width, selected)
+            old_segments = self.old_highlights[row.old_no - 1] if row.old_no and row.old_no <= len(self.old_highlights) else []
+            new_segments = self.new_highlights[row.new_no - 1] if row.new_no and row.new_no <= len(self.new_highlights) else []
+            self.draw_code(y, list_width + 1 + 6, old_segments, self.horizontal_scroll, content_width, selected)
+            self.draw_code(y, list_width + half + 1 + 6, new_segments, self.horizontal_scroll, content_width, selected)
 
         help_text = "j/k: move  h/l: horizontal  c: comment  v: comments  ?: help  S: send"
         selected_comment = self.comment_at_cursor()

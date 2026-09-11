@@ -28,6 +28,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/scripts/cst` | 実ファイル（実行可能） |
 | `~/.config/scripts/creview` | 実ファイル（実行可能） |
 | `~/.config/scripts/creview-code` | 実ファイル（実行可能） |
+| `~/.config/creview/` | VS Code TextMateハイライト連携 |
 | `~/.vscode/extensions/topilog.claude-review-0.1.0/` | VS Codeレビュー拡張 |
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
@@ -54,7 +55,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 ## セットアップ（新マシン）
 
 ```sh
-brew install chezmoi jq pygments
+brew install chezmoi jq node
 git clone git@github.com:topi-log/dotfiles.git ~/workspace/dotfiles
 ```
 
@@ -85,6 +86,10 @@ TOML
 chezmoi diff                 # 何が変わるか必ず確認する
 chezmoi apply
 ```
+
+初回の `chezmoi apply` では、固定されたlockfileからcreview用の
+`vscode-textmate` と `vscode-oniguruma` も自動配置する。VS Code本体・追加拡張の
+言語定義は実行時に自動検出される。
 
 `wlay` を使うには PATH に `~/.config/scripts` を追加する。
 リポジトリ側の `home/dot_zshrc` を編集して `chezmoi apply` する。

@@ -69,10 +69,12 @@ UI intended for reviewing Claude Code's work. It compares HEAD with the current 
 unstaged, untracked and deleted files into one list. Selecting a file previews
 its before/after contents side by side. It never fetches or changes Git state.
 Closing or sending the review returns to the original Claude Code tab.
-Source code is syntax-highlighted with Pygments, installed with Homebrew. The
-viewer automatically finds Homebrew's isolated Pygments Python environment on
-both Apple Silicon and Intel Macs. In WezTerm it defines the VS Code Dark+ RGB
-token colors directly; other terminals fall back to their 256 or basic colors.
+Source code is tokenized with the same TextMate engine, language grammars and
+Dark+ theme files as the installed VS Code. Built-in and installed VS Code
+language extensions are discovered from their manifests, so new file types do
+not need to be added to creview. The bridge requires Node.js and the pinned npm
+dependencies under `~/.config/creview`; the latter are installed automatically
+by a chezmoi `run_onchange` script when its lockfile changes.
 
 | Key | Action |
 |---|---|
