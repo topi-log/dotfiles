@@ -80,9 +80,11 @@ by a chezmoi `run_onchange` script when its lockfile changes.
 |---|---|
 | `j` / `k` or arrows | Move through files or diff lines |
 | `Tab` / `Enter` | Focus the diff; `Esc` returns to the file list |
+| `[` / `]` | Select the before/after side as the comment target |
 | `n` / `N` | Jump to the next/previous change hunk (wraps at the end) |
 | `h` / `l` or left/right | Scroll long diff lines horizontally |
-| `c` | Add or replace a review comment, shown below its line; `Esc` cancels input |
+| `c` | Add or replace a review comment on the selected side, shown below its line |
+| `Ctrl+N` while commenting | Insert a newline (`Enter` submits; `Esc` cancels) |
 | `x` | Remove the comment on the selected line |
 | `v` | View all review comments |
 | `?` | Show the keyboard help |
