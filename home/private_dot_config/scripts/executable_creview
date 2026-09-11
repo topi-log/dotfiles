@@ -484,20 +484,27 @@ class ReviewUI:
             return None
         return next((comment for comment in self.comments if (comment.path, comment.side, comment.line) == location), None)
 
-    def input_line(self, prompt: str) -> Optional[str]:
-        height, width = self.screen.getmaxyx()
+    def input_comment(self, title: str, initial: str = "") -> Optional[str]:
         curses.curs_set(1)
-        value = ""
+        value = initial
         try:
             while True:
-                self.screen.move(height - 1, 0)
-                self.screen.clrtoeol()
-                available = max(1, width - display_width(prompt) - 2)
-                display_value = value.replace("\n", " ↵ ")
-                visible = slice_cells(display_value, max(0, display_width(display_value) - available), available)
-                self.add(height - 1, 0, prompt + visible, curses.A_REVERSE)
-                cursor_x = min(width - 2, display_width(prompt) + display_width(visible))
-                self.screen.move(height - 1, cursor_x)
+                height, width = self.screen.getmaxyx()
+                self.screen.erase()
+                self.add(0, 0, f" レビューコメント — {title} ", curses.A_BOLD | curses.color_pair(4))
+                self.add(1, 0, "─" * max(0, width - 1), curses.A_DIM)
+
+                body_width = max(1, width - 4)
+                body_height = max(1, height - 4)
+                rendered = wrap_comment(value, body_width)
+                scroll = max(0, len(rendered) - body_height)
+                for offset, line in enumerate(rendered[scroll:scroll + body_height]):
+                    self.add(2 + offset, 2, line)
+
+                cursor_line = min(height - 2, 2 + len(rendered) - 1 - scroll)
+                cursor_x = min(width - 2, 2 + display_width(rendered[-1]))
+                self.add(height - 1, 0, "Shift+Enter: 改行  Enter: 保存  Esc: キャンセル", curses.A_REVERSE)
+                self.screen.move(cursor_line, cursor_x)
                 self.screen.refresh()
                 key = self.screen.get_wch()
                 if key == "\x1b":
@@ -520,8 +527,8 @@ class ReviewUI:
         path, side, line = location
         existing = self.comment_at_cursor()
         label = "BEFORE" if side == "before" else "AFTER"
-        prompt = f"Comment on {label} {path}:{line} (Shift+Enter newline): "
-        text = self.input_line(prompt)
+        title = f"{label} {path}:{line}"
+        text = self.input_comment(title, existing.text if existing else "")
         if text is None:
             self.message = "Comment cancelled"
             return
