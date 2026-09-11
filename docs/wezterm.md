@@ -66,7 +66,8 @@ Any argument other than the subcommands (`sh`, `git`, `review`, `diff`) is execu
 `Cmd+Shift+R` opens `creview` in a temporary full-screen tab. It is a read-only
 UI intended for reviewing Claude Code's work. It compares HEAD with the current working tree, combining staged,
 unstaged, untracked and deleted files into one list. Selecting a file previews
-its before/after contents side by side. It never fetches or changes Git state.
+its before/after contents side by side. Added and deleted lines use subtle green
+and red backgrounds without replacing syntax-highlight colors. It never fetches or changes Git state.
 Closing or sending the review returns to the original Claude Code tab.
 Source code is tokenized with the same TextMate engine, language grammars and
 Dark+ theme files as the installed VS Code. Built-in and installed VS Code

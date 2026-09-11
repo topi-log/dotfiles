@@ -221,8 +221,10 @@ class ReviewUI:
         self.comments: List[Comment] = []
         self.old_highlights = []
         self.new_highlights = []
+        self.theme_colors = {}
         self.theme_pairs = {}
-        self.next_theme_slot = 32
+        self.next_theme_color = 32
+        self.next_theme_pair = 32
         self.message = ""
         self.load_diff()
 
@@ -253,21 +255,36 @@ class ReviewUI:
             attr |= curses.A_REVERSE
         return attr
 
-    def theme_pair(self, color: str) -> int:
+    def theme_color(self, color: str) -> Optional[int]:
         color = color.upper()
-        if color in self.theme_pairs:
-            return self.theme_pairs[color]
+        if color in self.theme_colors:
+            return self.theme_colors[color]
         if not (curses.COLORS >= 256 and curses.can_change_color() and color.startswith("#") and len(color) == 7):
-            return 12
-        if self.next_theme_slot >= min(curses.COLORS, curses.COLOR_PAIRS):
-            return 12
-        slot = self.next_theme_slot
-        self.next_theme_slot += 1
+            return None
+        if self.next_theme_color >= curses.COLORS:
+            return None
+        slot = self.next_theme_color
+        self.next_theme_color += 1
         red, green, blue = (int(color[index:index + 2], 16) for index in (1, 3, 5))
         curses.init_color(slot, round(red * 1000 / 255), round(green * 1000 / 255), round(blue * 1000 / 255))
-        curses.init_pair(slot, slot, -1)
-        self.theme_pairs[color] = slot
+        self.theme_colors[color] = slot
         return slot
+
+    def theme_pair(self, foreground: str, background: Optional[str] = None) -> int:
+        key = (foreground.upper(), background.upper() if background else None)
+        if key in self.theme_pairs:
+            return self.theme_pairs[key]
+        foreground_slot = self.theme_color(foreground)
+        background_slot = self.theme_color(background) if background else -1
+        if foreground_slot is None or (background and background_slot is None):
+            return 12
+        if self.next_theme_pair >= curses.COLOR_PAIRS:
+            return 12
+        pair = self.next_theme_pair
+        self.next_theme_pair += 1
+        curses.init_pair(pair, foreground_slot, background_slot)
+        self.theme_pairs[key] = pair
+        return pair
 
     def comments_for_row(self, row: DiffRow) -> List[Comment]:
         if not self.files:
@@ -312,14 +329,17 @@ class ReviewUI:
         else:
             self.row_index = next((index for index in reversed(changes) if index < self.row_index), changes[-1])
 
-    def draw_code(self, y: int, x: int, segments, start: int, width: int, selected: bool):
+    def draw_code(self, y: int, x: int, segments, start: int, width: int, selected: bool, background: Optional[str]):
         position = 0
         drawn = 0
         for value, color in segments:
             value = value.rstrip("\n").replace("\t", "    ")
             visible = slice_cells(value, max(0, start - position), max(0, width - drawn))
             if visible and position + display_width(value) > start:
-                self.add(y, x + drawn, visible, self.color(self.theme_pair(color), selected))
+                attr = curses.color_pair(self.theme_pair(color, background))
+                if selected:
+                    attr |= curses.A_BOLD
+                self.add(y, x + drawn, visible, attr)
                 drawn += display_width(visible)
             position += display_width(value)
             if drawn >= width:
@@ -381,14 +401,25 @@ class ReviewUI:
             new_mark = "●" if row.new_no and (current_path, "after", row.new_no) in comment_keys else "+" if row.kind in ("add", "change") else " "
             old_prefix = f"{old_mark}{row.old_no or '':>4} "
             new_prefix = f"{new_mark}{row.new_no or '':>4} "
-            old_pair = 2 if row.kind in ("delete", "change") else 0
-            new_pair = 1 if row.kind in ("add", "change") else 0
-            self.add(y, list_width + 1, old_prefix, self.color(old_pair, selected))
-            self.add(y, list_width + half + 1, new_prefix, self.color(new_pair, selected))
+            old_background = "#3A2426" if row.kind in ("delete", "change") else None
+            new_background = "#20382B" if row.kind in ("add", "change") else None
+            old_foreground = "#D16969" if old_background else "#D4D4D4"
+            new_foreground = "#6A9955" if new_background else "#D4D4D4"
+            old_attr = curses.color_pair(self.theme_pair(old_foreground, old_background))
+            new_attr = curses.color_pair(self.theme_pair(new_foreground, new_background))
+            if selected:
+                old_attr |= curses.A_BOLD
+                new_attr |= curses.A_BOLD
+            if old_background:
+                self.add(y, list_width + 1, " " * (half - 1), old_attr)
+            if new_background:
+                self.add(y, list_width + half + 1, " " * (half - 1), new_attr)
+            self.add(y, list_width + 1, old_prefix, old_attr)
+            self.add(y, list_width + half + 1, new_prefix, new_attr)
             old_segments = self.old_highlights[row.old_no - 1] if row.old_no and row.old_no <= len(self.old_highlights) else []
             new_segments = self.new_highlights[row.new_no - 1] if row.new_no and row.new_no <= len(self.new_highlights) else []
-            self.draw_code(y, list_width + 1 + 6, old_segments, self.horizontal_scroll, content_width, selected)
-            self.draw_code(y, list_width + half + 1 + 6, new_segments, self.horizontal_scroll, content_width, selected)
+            self.draw_code(y, list_width + 1 + 6, old_segments, self.horizontal_scroll, content_width, selected, old_background)
+            self.draw_code(y, list_width + half + 1 + 6, new_segments, self.horizontal_scroll, content_width, selected, new_background)
             y += 1
             for comment in self.comments_for_row(row):
                 side = "変更後" if comment.side == "after" else "変更前"
