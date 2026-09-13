@@ -1,0 +1,3 @@
+# Remove obsolete review tooling from machines that already applied dotfiles.
+.config/scripts/creview
+.config/creview

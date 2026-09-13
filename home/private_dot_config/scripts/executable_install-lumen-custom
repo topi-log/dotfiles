@@ -1,0 +1,39 @@
+#!/bin/sh
+# Rebuild the pinned customization only when its source or architecture changes.
+set -eu
+PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.cargo/bin:$PATH"
+export PATH
+[ "$(uname -s)" = Darwin ] || { echo 'lumen-custom: this setup currently supports macOS.' >&2; exit 1; }
+assets="$HOME/.config/lumen-bootstrap"
+base=$(cat "$assets/upstream.commit")
+case "$base" in ''|*[!0-9a-f]*) echo 'Invalid lumen source revision' >&2; exit 1;; esac
+[ "${#base}" -eq 40 ] || exit 1
+command -v brew >/dev/null 2>&1 || { echo 'lumen-custom: install Homebrew first.' >&2; exit 1; }
+if ! command -v gh >/dev/null 2>&1; then brew install gh; fi
+if [ ! -x /Applications/WezTerm.app/Contents/MacOS/wezterm ] && ! command -v wezterm >/dev/null 2>&1; then
+    brew install --cask wezterm
+fi
+fingerprint="$base:$(shasum -a 256 "$assets/custom.patch" | cut -d ' ' -f 1):$(uname -m)"
+state="$HOME/.local/share/lumen-custom"
+if [ -x "$HOME/.local/bin/lumen-custom" ] && [ -f "$state/installed-source" ] && [ "$(cat "$state/installed-source")" = "$fingerprint" ]; then
+    exit 0
+fi
+if ! command -v cargo >/dev/null 2>&1 || ! command -v rustc >/dev/null 2>&1; then brew install rust; fi
+umask 077
+build=$(mktemp -d "${TMPDIR:-/tmp}/lumen-bootstrap.XXXXXXXX")
+trap 'rm -rf "$build"' EXIT
+trap 'exit 1' HUP INT TERM
+git init -q "$build/source"
+git -C "$build/source" fetch --quiet --depth 1 https://github.com/jnsahaj/lumen.git "$base"
+git -C "$build/source" checkout --quiet --detach FETCH_HEAD
+[ "$(git -C "$build/source" rev-parse HEAD)" = "$base" ] || exit 1
+git -C "$build/source" apply --check "$assets/custom.patch"
+git -C "$build/source" apply "$assets/custom.patch"
+target=${CARGO_TARGET_DIR:-$build/source/target}
+case "$target" in /*) ;; *) target="$build/source/$target";; esac
+(cd "$build/source" && cargo build --release --locked --target-dir "$target")
+mkdir -p "$HOME/.local/bin" "$state"
+install -m 755 "$target/release/lumen" "$HOME/.local/bin/lumen-custom.new"
+mv -f "$HOME/.local/bin/lumen-custom.new" "$HOME/.local/bin/lumen-custom"
+printf '%s' "$fingerprint" > "$state/installed-source"
+echo 'lumen-custom: installed. Open review with Cmd+Shift+R in WezTerm.'

@@ -1,0 +1,31 @@
+#!/bin/sh
+# Return the submitted review as a draft to the original WezTerm pane.
+set -eu
+repo=${1:?Repository path required}
+pane=${2:?Source WezTerm pane required}
+case "$pane" in ''|*[!0-9]*) echo 'Invalid source pane' >&2; exit 2;; esac
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+export PATH
+binary=${LUMEN_CUSTOM_BIN:-$HOME/.local/bin/lumen-custom}
+wezterm=${LUMEN_WEZTERM:-/Applications/WezTerm.app/Contents/MacOS/wezterm}
+umask 077
+session=$(mktemp -d "${TMPDIR:-/tmp}/lumen-shortcut.XXXXXXXX")
+cleanup() { rm -f "$session/review.md"; rmdir "$session"; }
+fail() {
+  printf '%s\n' "$1" >&2
+  if [ -t 0 ]; then printf 'Enterで閉じます。'; read -r unused || :; fi
+  exit 1
+}
+if ! (cd "$repo" && "$binary" diff --github-reviews --output "$session/review.md"); then
+  cleanup
+  fail 'レビューを起動できませんでした。'
+fi
+if [ ! -s "$session/review.md" ]; then
+  cleanup
+  exit 0
+fi
+# Keep the original server environment; send a bracketed paste, never Enter.
+if ! "$wezterm" cli send-text --pane-id "$pane" < "$session/review.md"; then
+  fail "入力欄へ戻せませんでした。コメントは $session/review.md に保存しました。"
+fi
+cleanup

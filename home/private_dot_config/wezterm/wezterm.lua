@@ -42,7 +42,7 @@ end)
 
 -- Claude Code sessions (see docs/wezterm.md, "cst")
 local cst = wezterm.home_dir .. "/.config/scripts/cst"
-local creview = wezterm.home_dir .. "/.config/scripts/creview"
+local lumen_review = wezterm.home_dir .. "/.local/bin/lumen-review-shortcut"
 local state_labels = { busy = "作業中  ", waiting = "許可待ち", idle = "入力待ち" }
 
 local function project_dir(pane)
@@ -93,6 +93,8 @@ end
 config.use_ime = true
 
 config.keys = {
+    -- Cmd is handled by WezTerm; forward F3 to the review TUI.
+    { key = "b", mods = "CMD", action = act.SendString("\x1b[13~") },
 	{
 		key = "/",
 		mods = "CMD",
@@ -137,9 +139,12 @@ config.keys = {
 				return
 			end
 
+			if not window:get_dimensions().is_full_screen then
+				window:toggle_fullscreen()
+			end
 			window:perform_action(
 				act.SpawnCommandInNewTab({
-					args = { creview, "--root", cwd, "--claude-pane", tostring(pane:pane_id()) },
+					args = { lumen_review, cwd, tostring(pane:pane_id()) },
 					cwd = cwd,
 				}),
 				pane

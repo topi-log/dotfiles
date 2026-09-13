@@ -1,0 +1,2 @@
+# Unified patches contain a single context-prefix space on blank lines.
+home/private_dot_config/lumen-bootstrap/custom.patch whitespace=-blank-at-eol

@@ -1,0 +1,7 @@
+#!/bin/sh
+# upstream: {{ include "private_dot_config/lumen-bootstrap/upstream.commit" | trim }}
+# patch: {{ include "private_dot_config/lumen-bootstrap/custom.patch" | sha256sum }}
+# installer: {{ include "private_dot_config/scripts/executable_install-lumen-custom" | sha256sum }}
+# shortcut: {{ include "dot_local/bin/executable_lumen-review-shortcut" | sha256sum }}
+set -eu
+"$HOME/.config/scripts/install-lumen-custom"

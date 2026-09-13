@@ -63,54 +63,16 @@ original pane.
 Any argument other than the subcommands (`sh`, `git`, `review`, `diff`) is executed as-is
 (e.g. `wlay htop`).
 
-`Cmd+Shift+R` opens `creview` in a temporary full-screen tab. It is a read-only
-UI intended for reviewing Claude Code's work. It compares HEAD with the current working tree, combining staged,
-unstaged, untracked and deleted files into one list. Selecting a file previews
-its before/after contents side by side. Added and deleted lines use subtle green
-and red backgrounds without replacing syntax-highlight colors. It never fetches or changes Git state.
-Closing or sending the review returns to the original Claude Code tab.
-Source code is tokenized with the same TextMate engine, language grammars and
-Dark+ theme files as the installed VS Code. Built-in and installed VS Code
-language extensions are discovered from their manifests, so new file types do
-not need to be added to creview. The bridge requires Node.js and the pinned npm
-dependencies under `~/.config/creview`; the latter are installed automatically
-by a chezmoi `run_onchange` script when its lockfile changes.
+`Cmd+Shift+R` opens customized lumen in a tab of the current WezTerm window,
+preserving the normal font and color configuration. File navigation previews diffs
+without Enter. Enter or `2` enters keyboard line selection automatically; arrows move,
+Shift+arrows select a range, and `c` adds a comment. `s` returns a draft to the original
+Claude Code pane; Enter in Claude Code submits it. `?` opens Japanese help and `p`
+selects the shortcuts shown persistently.
 
-| Key | Action |
-|---|---|
-| `j` / `k` or arrows | Move through files or diff lines |
-| `Tab` / `Enter` | Focus the diff; `Esc` returns to the file list |
-| `[` / `]` | Select the before/after side as the comment target |
-| `n` / `N` | Jump to the next/previous change hunk (wraps at the end) |
-| `h` / `l` or left/right | Scroll long diff lines horizontally |
-| `c` | Open the multiline comment editor below the visible diff for the selected side |
-| `Shift+Enter` while commenting | Insert a newline (`Enter` submits; `Esc` cancels) |
-| `V`, then `j` / `k` | Start line selection and extend the range |
-| `y` | Copy the current line or selected range to the macOS clipboard |
-| `x` | Remove the comment on the selected line |
-| `v` | View all review comments |
-| `?` | Show the keyboard help |
-| `S` | Put all comments into the original Claude Code prompt as a draft, then close |
-| `Esc` | Cancel comment input, return to the file list, or close the review from the file list |
-
-`wlay review` provides the same view from a regular interactive shell. Do not
-type it into Claude Code's prompt because Claude's shell tools do not provide
-the interactive terminal required by a TUI.
-
-`wlay diff` runs from the Git worktree root, even when invoked from a
-subdirectory. Pass paths or regular `git diff` options after it to narrow the
-view (for example, `wlay diff -- README.md`). Quit the pager with `q`; the
-temporary pane then closes and the original pane is restored.
-
-### Setup
-
-`chezmoi apply` creates `~/.config/scripts/wlay` as a symlink to
-`~/.config/wezterm/wlay`. Add the directory to PATH in `~/.zshrc` by hand
-(`~/.zshrc` is not managed by this repository).
-
-```bash
-export PATH="$HOME/.config/scripts:$PATH"
-```
+The custom binary and shortcut are installed by `chezmoi apply`. See [lumen setup](lumen.md)
+for dependencies and reproducible source updates. `wlay review` uses the same custom
+review from a shell.
 
 ## cst - Claude Code Session Status
 

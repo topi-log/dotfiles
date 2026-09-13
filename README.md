@@ -26,8 +26,10 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 | `~/.config/wezterm/wlay` | 実ファイル（実行可能） |
 | `~/.config/scripts/wlay` | symlink（`wezterm/wlay` を指す） |
 | `~/.config/scripts/cst` | 実ファイル（実行可能） |
-| `~/.config/scripts/creview` | 実ファイル（実行可能） |
-| `~/.config/creview/` | VS Code TextMateハイライト連携 |
+| `~/.local/bin/lumen-custom` | セットアップ時にビルド・更新 |
+| `~/.local/bin/lumen-review-shortcut` | 実ファイル（実行可能） |
+| `~/.config/scripts/install-lumen-custom` | 実ファイル（実行可能） |
+| `~/.config/lumen-bootstrap/` | 固定バージョン・カスタマイズ差分・ライセンス |
 | `~/.config/karabiner/karabiner.json` | symlink |
 | `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
 | `~/.config/gh/config.yml` | symlink |
@@ -53,7 +55,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 ## セットアップ（新マシン）
 
 ```sh
-brew install chezmoi jq node
+brew install chezmoi jq
 git clone git@github.com:topi-log/dotfiles.git ~/workspace/dotfiles
 ```
 
@@ -85,9 +87,19 @@ chezmoi diff                 # 何が変わるか必ず確認する
 chezmoi apply
 ```
 
-初回の `chezmoi apply` では、固定されたlockfileからcreview用の
-`vscode-textmate` と `vscode-oniguruma` も自動配置する。VS Code本体・追加拡張の
-言語定義は実行時に自動検出される。
+初回の `chezmoi apply` では、カスタム版lumenを自動ビルドし、
+`~/.local/bin/lumen-custom` と `Cmd+Shift+R` のレビュー起動設定を導入する。
+不足しているRust、GitHub CLI、WezTermはHomebrewでインストールする。
+初回のビルドには数分かかる。実行時にRustは不要。
+
+lumen本体の固定コミットと、このリポジトリに同梱したカスタマイズ差分から
+構築するため、別途lumenのローカルリポジトリを用意する必要はない。
+ソースとCPUアーキテクチャの記録が一致している場合、再ビルドを省略する。
+手動で再確認する場合は `~/.config/scripts/install-lumen-custom` を実行する。
+GitHubレビューの取得には別途 `gh auth login` が必要。
+
+常時ガイドの個別設定は各PCの `~/.config/lumen/review-shortcuts.json` に保存される。
+カスタマイズの更新方法は [lumenの導入・更新](docs/lumen.md) を参照。
 
 `wlay` を使うには PATH に `~/.config/scripts` を追加する。
 リポジトリ側の `home/dot_zshrc` を編集して `chezmoi apply` する。

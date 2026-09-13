@@ -28,8 +28,8 @@ case "${1:-sh}" in
   git) shift; set -- lazygit "$@" ;;
   review)
     shift
-    if [ ! -x "$HOME/.config/scripts/creview" ]; then
-      echo "Error: creview is not installed (run chezmoi apply)" >&2
+    if [ ! -x "$HOME/.local/bin/lumen-review-shortcut" ]; then
+      echo "Error: lumen-custom is not installed (run chezmoi apply)" >&2
       exit 1
     fi
     if ! project_dir=$(git rev-parse --show-toplevel 2>/dev/null); then
@@ -37,7 +37,7 @@ case "${1:-sh}" in
       exit 1
     fi
     cd "$project_dir"
-    set -- "$HOME/.config/scripts/creview" --root "$project_dir" --claude-pane "$WEZTERM_PANE" "$@"
+    set -- "$HOME/.local/bin/lumen-review-shortcut" "$project_dir" "$WEZTERM_PANE" "$@"
     ;;
   diff)
     shift
