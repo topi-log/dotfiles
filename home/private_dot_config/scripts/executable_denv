@@ -1,0 +1,458 @@
+#!/usr/bin/env bash
+# Register local dev environments and start, stop and watch them from one list.
+#
+#   denv                 interactive list (fzf)
+#   denv list            print the table once
+#   denv add             register an environment
+#   denv start NAME      run its start command in the background
+#   denv stop NAME       stop it (custom stop command, otherwise SIGTERM)
+#   denv kill NAME       SIGKILL the whole process group
+#   denv log NAME        follow its log
+#
+# Definitions live in ~/.config/denv/envs.json; pid and log files in
+# ~/.local/state/denv. Ports are not configured: they are read back from the
+# process group with lsof, so whatever the app decides to listen on is shown.
+set -uo pipefail
+
+CONFIG_DIR="${DENV_CONFIG_DIR:-$HOME/.config/denv}"
+STATE_DIR="${DENV_STATE_DIR:-$HOME/.local/state/denv}"
+CONFIG="$CONFIG_DIR/envs.json"
+TERM_WAIT=5  # seconds to wait after SIGTERM before SIGKILL
+STOP_WAIT=10 # seconds to wait for a custom stop command
+
+# WezTerm launched from Finder sees neither the Homebrew PATH nor a UTF-8 locale.
+case ":$PATH:" in
+*:/opt/homebrew/bin:*) ;;
+*) PATH="/opt/homebrew/bin:/usr/local/bin:$PATH" ;;
+esac
+export LC_ALL=en_US.UTF-8
+
+SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+
+die() {
+	echo "denv: $*" >&2
+	exit 1
+}
+
+command -v jq >/dev/null 2>&1 || die "jq is required (brew install jq)"
+
+ensure_config() {
+	mkdir -p "$CONFIG_DIR" || die "cannot create $CONFIG_DIR"
+	[ -f "$CONFIG" ] || echo '{"envs":[]}' >"$CONFIG"
+}
+
+write_config() {
+	local tmp
+	tmp=$(mktemp "$CONFIG_DIR/.envs.XXXXXX") || die "cannot write $CONFIG"
+	if jq "$@" "$CONFIG" >"$tmp"; then
+		mv "$tmp" "$CONFIG"
+	else
+		rm -f "$tmp"
+		die "failed to update $CONFIG"
+	fi
+}
+
+env_exists() {
+	jq -e --arg n "$1" '[.envs[] | select(.name == $n)] | length > 0' "$CONFIG" >/dev/null 2>&1
+}
+
+env_field() {
+	jq -r --arg n "$1" --arg f "$2" '(.envs[] | select(.name == $n))[$f] // ""' "$CONFIG"
+}
+
+env_names() {
+	jq -r '.envs[].name' "$CONFIG"
+}
+
+pid_file() { echo "$STATE_DIR/$1.pid"; }
+log_file() { echo "$STATE_DIR/$1.log"; }
+
+expand_dir() {
+	case "$1" in
+	"~") echo "$HOME" ;;
+	"~/"*) echo "$HOME/${1#\~/}" ;;
+	*) echo "$1" ;;
+	esac
+}
+
+collapse_dir() {
+	case "$1" in
+	"$HOME") echo "~" ;;
+	"$HOME/"*) echo "~/${1#"$HOME"/}" ;;
+	*) echo "$1" ;;
+	esac
+}
+
+pgid_of() {
+	local f pgid
+	f=$(pid_file "$1")
+	[ -f "$f" ] || return 1
+	pgid=$(cat "$f" 2>/dev/null)
+	case "$pgid" in
+	"" | *[!0-9]*) return 1 ;;
+	esac
+	echo "$pgid"
+}
+
+# A start command may exit while its children keep serving, so the whole
+# process group decides whether the environment is up.
+is_up() {
+	local pgid
+	pgid=$(pgid_of "$1") || return 1
+	kill -0 -"$pgid" 2>/dev/null
+}
+
+status_of() {
+	if is_up "$1"; then echo up; else echo down; fi
+}
+
+ports_of() {
+	local pgid
+	pgid=$(pgid_of "$1") || return 0
+	lsof -nP -w -a -iTCP -sTCP:LISTEN -g "$pgid" -Fn 2>/dev/null |
+		sed -n 's/^n.*:\([0-9][0-9]*\)$/\1/p' | sort -un | paste -sd, -
+}
+
+use_color() {
+	[ -n "${DENV_COLOR:-}" ] || [ -t 1 ]
+}
+
+row() {
+	local name=$1 status ports dir mark
+	status=$(status_of "$name")
+	ports=$(ports_of "$name")
+	[ -n "$ports" ] || ports="-"
+	dir=$(collapse_dir "$(expand_dir "$(env_field "$name" dir)")")
+	if use_color; then
+		if [ "$status" = up ]; then
+			mark=$'\033[32m\xe2\x97\x8f\033[0m'
+			status=$'\033[32mup  \033[0m'
+		else
+			mark=$'\033[90m\xe2\x97\x8b\033[0m'
+			status=$'\033[90mdown\033[0m'
+		fi
+		printf '%-18s %-14s %s %s  %s\n' "$name" "$ports" "$mark" "$status" "$dir"
+	else
+		if [ "$status" = up ]; then mark="●"; else mark="○"; fi
+		printf '%-18s %-14s %s %-4s  %s\n' "$name" "$ports" "$mark" "$status" "$dir"
+	fi
+}
+
+header_line() {
+	printf '%-18s %-14s %-6s  %s' NAME PORT STATUS DIR
+}
+
+cmd_rows() {
+	local name
+	for name in $(env_names); do
+		row "$name"
+	done
+}
+
+cmd_list() {
+	header_line
+	echo
+	cmd_rows
+}
+
+wait_for_down() {
+	local name=$1 steps=$(($2 * 5)) i=0
+	while [ "$i" -lt "$steps" ]; do
+		is_up "$name" || return 0
+		sleep 0.2
+		i=$((i + 1))
+	done
+	! is_up "$name"
+}
+
+need_env() {
+	[ -n "${1:-}" ] || die "environment name required"
+	env_exists "$1" || die "no such environment: $1"
+}
+
+cmd_start() {
+	local name=${1:-} dir start log
+	need_env "$name"
+	if is_up "$name"; then
+		echo "denv: $name is already running"
+		return 0
+	fi
+	dir=$(expand_dir "$(env_field "$name" dir)")
+	[ -d "$dir" ] || die "directory not found: $dir"
+	start=$(env_field "$name" start)
+	[ -n "$start" ] || die "$name has no start command"
+
+	mkdir -p "$STATE_DIR" || die "cannot create $STATE_DIR"
+	log=$(log_file "$name")
+	printf '\n===== %s start: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$start" >>"$log"
+
+	# Job control puts the background job in its own process group, so stopping
+	# reaches its children without signalling denv itself. macOS has no setsid,
+	# and bash 3.2 honours `set -m` in a non-interactive shell.
+	(
+		cd "$dir" || exit 1
+		set -m
+		nohup bash -c "$start" >>"$log" 2>&1 &
+		echo $! >"$(pid_file "$name")"
+	) || die "failed to start $name"
+
+	sleep 0.3
+	if is_up "$name"; then
+		echo "denv: started $name"
+	else
+		rm -f "$(pid_file "$name")"
+		echo "denv: $name exited immediately" >&2
+		tail -n 10 "$log" >&2
+		return 1
+	fi
+}
+
+cmd_stop() {
+	local name=${1:-} pgid stop dir
+	need_env "$name"
+	if ! is_up "$name"; then
+		rm -f "$(pid_file "$name")"
+		echo "denv: $name is not running"
+		return 0
+	fi
+	pgid=$(pgid_of "$name")
+	stop=$(env_field "$name" stop)
+	if [ -n "$stop" ]; then
+		dir=$(expand_dir "$(env_field "$name" dir)")
+		(cd "$dir" 2>/dev/null && bash -c "$stop") >/dev/null 2>&1
+		if ! wait_for_down "$name" "$STOP_WAIT"; then
+			echo "denv: $name did not stop; try 'denv kill $name'" >&2
+			return 1
+		fi
+	else
+		kill -TERM -"$pgid" 2>/dev/null
+		if ! wait_for_down "$name" "$TERM_WAIT"; then
+			kill -KILL -"$pgid" 2>/dev/null
+			if ! wait_for_down "$name" 2; then
+				echo "denv: $name did not stop" >&2
+				return 1
+			fi
+		fi
+	fi
+	rm -f "$(pid_file "$name")"
+	echo "denv: stopped $name"
+}
+
+cmd_kill() {
+	local name=${1:-} pgid
+	need_env "$name"
+	if pgid=$(pgid_of "$name"); then
+		kill -KILL -"$pgid" 2>/dev/null
+		wait_for_down "$name" 2 || true
+	fi
+	rm -f "$(pid_file "$name")"
+	echo "denv: killed $name"
+}
+
+cmd_toggle() {
+	[ -n "${1:-}" ] || exit 0
+	if is_up "$1"; then cmd_stop "$1"; else cmd_start "$1"; fi
+}
+
+valid_name() {
+	case "$1" in
+	"" | *[!A-Za-z0-9._-]*) return 1 ;;
+	esac
+	return 0
+}
+
+# Ask for one field. $2 is offered as the default and kept when input is empty.
+ask() {
+	local prompt=$1 current=${2:-} answer
+	if [ -n "$current" ]; then
+		printf '%s [%s]: ' "$prompt" "$current" >&2
+	else
+		printf '%s: ' "$prompt" >&2
+	fi
+	IFS= read -r answer || answer=""
+	[ -n "$answer" ] || answer=$current
+	echo "$answer"
+}
+
+ask_dir() {
+	local current=${1:-} dir
+	dir=$(ask "dir   起動するディレクトリ" "${current:-$(collapse_dir "$PWD")}")
+	[ -n "$dir" ] || die "directory required"
+	[ -d "$(expand_dir "$dir")" ] || die "directory not found: $dir"
+	collapse_dir "$(expand_dir "$dir")"
+}
+
+cmd_add() {
+	local name dir start stop
+	echo "環境を登録します（Ctrl-C で中止）" >&2
+	name=$(ask "name  一覧に出す名前 (例: web-app)")
+	valid_name "$name" || die "name must match [A-Za-z0-9._-]+"
+	env_exists "$name" && die "$name already exists"
+	dir=$(ask_dir) || exit 1
+	start=$(ask "start 起動コマンド (例: npm run dev)")
+	[ -n "$start" ] || die "start command required"
+	stop=$(ask "stop  停止コマンド (空ならシグナルで停止)")
+	write_config --arg n "$name" --arg d "$dir" --arg s "$start" --arg t "$stop" \
+		'.envs += [{name: $n, dir: $d, start: $s, stop: $t}]'
+	echo "denv: added $name"
+}
+
+cmd_edit() {
+	local name=${1:-} dir start stop
+	need_env "$name"
+	dir=$(ask_dir "$(env_field "$name" dir)") || exit 1
+	start=$(ask "start command" "$(env_field "$name" start)")
+	[ -n "$start" ] || die "start command required"
+	stop=$(ask "stop  停止コマンド (空ならシグナルで停止)" "$(env_field "$name" stop)")
+	write_config --arg n "$name" --arg d "$dir" --arg s "$start" --arg t "$stop" \
+		'.envs = [.envs[] | if .name == $n then {name: $n, dir: $d, start: $s, stop: $t} else . end]'
+	echo "denv: updated $name"
+}
+
+cmd_delete() {
+	local name=${1:-} answer
+	need_env "$name"
+	is_up "$name" && die "$name is running; stop it first"
+	printf 'delete %s? [y/N]: ' "$name" >&2
+	IFS= read -r answer || answer=""
+	case "$answer" in
+	y | Y) ;;
+	*)
+		echo "denv: cancelled" >&2
+		return 0
+		;;
+	esac
+	write_config --arg n "$name" '.envs = [.envs[] | select(.name != $n)]'
+	rm -f "$(pid_file "$name")" "$(log_file "$name")"
+	echo "denv: deleted $name"
+}
+
+cmd_log() {
+	local name=${1:-} log
+	need_env "$name"
+	log=$(log_file "$name")
+	[ -f "$log" ] || die "no log yet for $name"
+	tail -n 200 -f "$log"
+}
+
+cmd_detail() {
+	local name=${1:-} log ports stop
+	[ -n "$name" ] || exit 0
+	env_exists "$name" || exit 0
+	ports=$(ports_of "$name")
+	[ -n "$ports" ] || ports="-"
+	stop=$(env_field "$name" stop)
+	[ -n "$stop" ] || stop="(signal)"
+	printf 'name   %s\n' "$name"
+	printf 'dir    %s\n' "$(env_field "$name" dir)"
+	printf 'start  %s\n' "$(env_field "$name" start)"
+	printf 'stop   %s\n' "$stop"
+	printf 'status %s\n' "$(status_of "$name")"
+	printf 'port   %s\n' "$ports"
+	echo
+	log=$(log_file "$name")
+	if [ -f "$log" ]; then
+		printf -- '--- %s\n' "$log"
+		tail -n 40 "$log"
+	else
+		echo "--- no log yet"
+	fi
+}
+
+cmd_help() {
+	cat <<EOF
+denv — 開発環境の起動状況を一覧して起動・停止する
+
+使い方
+  denv                 一覧を開く
+  denv list            一覧を一度だけ表示する
+  denv add             環境を登録する
+  denv edit NAME       登録内容を変更する
+  denv delete NAME     登録を削除する
+  denv start NAME      起動する
+  denv stop NAME       停止する
+  denv kill NAME       強制終了する (SIGKILL)
+  denv log NAME        ログを追従表示する
+  denv help            このヘルプ
+
+一覧画面のキー
+  enter    起動中なら停止、停止中なら起動
+  s / x    起動 / 停止
+  k        強制終了
+  l        ログを追従表示 (q で一覧に戻る)
+  a        環境を追加
+  e        登録内容を変更
+  d        環境を削除
+  r / q    再描画 / 終了
+  ?        このヘルプ
+
+環境の登録 (a または denv add)
+  name   一覧に出す名前。英数字と . _ - が使える
+  dir    起動するディレクトリ。既定はカレントディレクトリ
+  start  起動コマンド (例: npm run dev / bin/rails s / docker compose up)
+  stop   停止コマンド。空ならプロセスグループにシグナルを送って止める。
+         docker compose up のように起動コマンドが終了しても実体が残るものは
+         docker compose down を設定する
+
+ポートは登録しない。起動したプロセスが実際に LISTEN しているポートを、
+一覧を描画するたびに lsof で読み直して表示する。
+
+ファイル
+  環境定義  $CONFIG
+  ログ      $STATE_DIR/<name>.log
+  pid       $STATE_DIR/<name>.pid
+EOF
+}
+
+tui() {
+	command -v fzf >/dev/null 2>&1 || die "fzf is required (brew install fzf)"
+	export DENV_CONFIG_DIR="$CONFIG_DIR" DENV_STATE_DIR="$STATE_DIR" DENV_COLOR=1
+	local self reload keys header
+	self="'$SELF'"
+	reload="reload($self _rows)"
+	keys='enter:toggle  s:start  x:stop  k:kill  l:log  a:add  e:edit  d:delete  r:reload  ?:help  q:quit'
+	if [ -z "$(env_names)" ]; then
+		header="まだ環境がありません。a で追加、? でヘルプ"$'\n'"$keys"
+	else
+		header="$keys"$'\n'"$(header_line)"
+	fi
+	"$SELF" _rows | fzf \
+		--ansi \
+		--no-sort \
+		--reverse \
+		--header "$header" \
+		--preview "$self _detail {1}" \
+		--preview-window 'right,50%,wrap' \
+		--bind "enter:execute-silent($self _toggle {1})+$reload" \
+		--bind "s:execute-silent($self start {1})+$reload" \
+		--bind "x:execute-silent($self stop {1})+$reload" \
+		--bind "k:execute-silent($self kill {1})+$reload" \
+		--bind "l:execute($self log {1})" \
+		--bind "a:execute($self add)+$reload" \
+		--bind "e:execute($self edit {1})+$reload" \
+		--bind "d:execute($self delete {1})+$reload" \
+		--bind "r:$reload" \
+		--bind "?:execute($self help | ${PAGER:-less} -R)" \
+		--bind 'q:abort' >/dev/null
+}
+
+ensure_config
+
+case "${1:-}" in
+"") tui ;;
+list | ls) cmd_list ;;
+start) cmd_start "${2:-}" ;;
+stop) cmd_stop "${2:-}" ;;
+kill) cmd_kill "${2:-}" ;;
+add) cmd_add ;;
+edit) cmd_edit "${2:-}" ;;
+delete | rm) cmd_delete "${2:-}" ;;
+log) cmd_log "${2:-}" ;;
+_rows) cmd_rows ;;
+_detail) cmd_detail "${2:-}" ;;
+_toggle) cmd_toggle "${2:-}" ;;
+_status) [ -n "${2:-}" ] && status_of "$2" ;;
+_names) env_names ;;
+-h | --help | help) cmd_help ;;
+*) die "unknown command: $1 (try 'denv --help')" ;;
+esac

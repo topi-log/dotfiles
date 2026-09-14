@@ -9,48 +9,14 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 シンボリックリンクになる。実ファイルを編集すればリポジトリが即座に更新されるため、
 変更を「取り込む」操作は不要。
 
-ただし次のファイルは chezmoi の仕様により実ファイルとして書き出されるため、
-リポジトリ側を編集して `chezmoi apply` する向きで運用する。
-
-| ファイル | 実ファイルになる理由 |
-|---|---|
-| `~/.claude/settings.json` | テンプレート（マシン固有の値を含む） |
-| `~/.config/wezterm/wlay` | 実行可能属性が必要 |
-| `~/.config/scripts/cst` | 実行可能属性が必要 |
+ただし一部のファイルは chezmoi の仕様により実ファイルとして書き出される。
+その場合はリポジトリ側を編集して `chezmoi apply` する向きで運用する。
 
 ## 管理対象
 
-| 実配置パス | 配置方式 |
-|---|---|
-| `~/.config/wezterm/wezterm.lua` | symlink |
-| `~/.config/wezterm/wlay` | 実ファイル（実行可能） |
-| `~/.config/scripts/wlay` | symlink（`wezterm/wlay` を指す） |
-| `~/.config/scripts/cst` | 実ファイル（実行可能） |
-| `~/.local/bin/lumen-custom` | セットアップ時にビルド・更新 |
-| `~/.local/bin/lumen-review-shortcut` | 実ファイル（実行可能） |
-| `~/.config/scripts/install-lumen-custom` | 実ファイル（実行可能） |
-| `~/.config/lumen-bootstrap/` | 固定バージョン・カスタマイズ差分・ライセンス |
-| `~/.config/karabiner/karabiner.json` | symlink |
-| `~/.config/karabiner/assets/complex_modifications/windows_keys.json` | symlink |
-| `~/.config/gh/config.yml` | symlink |
-| `~/.gitconfig` | symlink |
-| `~/.zprofile` | symlink |
-| `~/.zshrc` | symlink |
-| `~/.claude/settings.json` | 実ファイル（テンプレート） |
-| `~/.claude/CLAUDE.md` | symlink |
-| `~/.claude/hooks/notify-when-quiet.sh` | symlink |
-| `~/.claude/hooks/session-status.sh` | symlink |
-| `~/.claude/statusline.sh` | symlink |
-
-管理していないもの:
-
-- `~/.config/gh/hosts.yml` — 認証トークンを含む
-- `~/.config/karabiner/automatic_backups/` — Karabiner-Elements の自動生成物
-- `~/.config/karabiner/assets/complex_modifications/1737014820.json` —
-  外部からインポートしたルールセット。出自とライセンスが不明なため再配布しない
-- `~/.zsh/`（`git-completion.bash`、`git-prompt.sh`、`_git`）— git 公式の
-  スクリプトで GPL-2.0。再配布を避けるため管理対象外。取得方法は後述
-- `~/.config/git/ignore` — 未着手。`chezmoi add` で追加できる
+配置しているファイルと、あえて管理していないファイルは
+[管理対象ファイル](docs/managed-files.md) にまとめてある。
+実際に配置されているものは `chezmoi managed` でも確認できる。
 
 ## セットアップ（新マシン）
 
@@ -101,7 +67,7 @@ GitHubレビューの取得には別途 `gh auth login` が必要。
 常時ガイドの個別設定は各PCの `~/.config/lumen/review-shortcuts.json` に保存される。
 カスタマイズの更新方法は [lumenの導入・更新](docs/lumen.md) を参照。
 
-`wlay` を使うには PATH に `~/.config/scripts` を追加する。
+`wlay` と `denv` を使うには PATH に `~/.config/scripts` を追加する。
 リポジトリ側の `home/dot_zshrc` を編集して `chezmoi apply` する。
 
 ```sh
@@ -201,5 +167,8 @@ source directory がこのリポジトリの場所を指しているため。切
 
 ## ドキュメント
 
-- [wezterm の設定と wlay / cst](docs/wezterm.md)
+- [管理対象ファイル](docs/managed-files.md) — 配置するファイルと除外したファイル
+- [wezterm の設定と wlay / cst](docs/wezterm.md) — ターミナルの設定とキーバインド
+- [denv](docs/denv.md) — 開発環境の起動状況の一覧と起動・停止
+- [lumen の導入・更新](docs/lumen.md) — カスタム版 lumen のビルドと差分の更新
 - [Claude Code グローバル指示の日本語訳](docs/claude-global-instructions.ja.md)
