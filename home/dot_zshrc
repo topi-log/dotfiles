@@ -43,3 +43,16 @@ function update-vcs-info() {
 add-zsh-hook precmd update-vcs-info
 
 PROMPT='%1~${vcs_info_msg_0_} %# '
+
+# --- WezTerm --------------------------------------------------------------
+# OSC 7 でカレントディレクトリを端末に通知する。これを送らないと WezTerm は
+# プロセス情報からペインの作業ディレクトリを推測し、外すとホームへ
+# フォールバックするため、Cmd+Shift+R のリポジトリ判定が壊れる。
+# chpwd は初回に発火しないので、シェル起動時にも一度送る。
+if [[ -n $WEZTERM_PANE ]] && (( $+commands[wezterm] )); then
+  function update-wezterm-cwd() {
+    wezterm set-working-directory 2>/dev/null
+  }
+  add-zsh-hook chpwd update-wezterm-cwd
+  update-wezterm-cwd
+fi

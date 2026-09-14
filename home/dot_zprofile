@@ -28,6 +28,10 @@ export PATH="$HOME/.local/bin:$HOME/.config/scripts:$PATH"
 [ -d "/Applications/Visual Studio Code.app/Contents/Resources/app/bin" ] &&
   export PATH="$PATH:/Applications/Visual Studio Code.app/Contents/Resources/app/bin"
 
+# WezTerm の CLI（wezterm cli / set-working-directory）
+[ -d "/Applications/WezTerm.app/Contents/MacOS" ] &&
+  export PATH="$PATH:/Applications/WezTerm.app/Contents/MacOS"
+
 # Go
 [ -d /usr/local/go/bin ] && export PATH="$PATH:/usr/local/go/bin"
 

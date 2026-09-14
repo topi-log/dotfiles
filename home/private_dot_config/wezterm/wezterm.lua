@@ -45,18 +45,38 @@ local cst = wezterm.home_dir .. "/.config/scripts/cst"
 local lumen_review = wezterm.home_dir .. "/.local/bin/lumen-review-shortcut"
 local state_labels = { busy = "作業中  ", waiting = "許可待ち", idle = "入力待ち" }
 
-local function project_dir(pane)
-	local cwd_uri = pane:get_current_working_dir()
-	if not cwd_uri then
-		return nil
+-- Prefer the running program's own directory. ccsession resumes a Claude Code
+-- session by chdir-ing inside its own process, so the shell never reports the
+-- session's directory and WezTerm keeps the one the pane started in -- which
+-- for a worktree session is the main repository, and would silently review the
+-- wrong checkout.
+local function pane_dirs(pane)
+	local dirs = {}
+	local ok, info = pcall(pane.get_foreground_process_info, pane)
+	if ok and info and info.cwd then
+		table.insert(dirs, info.cwd)
 	end
 
-	local cwd = cwd_uri.file_path
-	local ok, stdout = wezterm.run_child_process({ "git", "-C", cwd, "rev-parse", "--show-toplevel" })
-	if ok then
-		return stdout:gsub("%s+$", "")
+	local cwd_uri = pane:get_current_working_dir()
+	if cwd_uri and cwd_uri.file_path ~= dirs[1] then
+		table.insert(dirs, cwd_uri.file_path)
 	end
-	return cwd
+	return dirs
+end
+
+local function repo_dir(pane)
+	for _, dir in ipairs(pane_dirs(pane)) do
+		local args = { "git", "-C", dir, "rev-parse", "--show-toplevel" }
+		local ok, stdout = wezterm.run_child_process(args)
+		if ok then
+			return stdout:gsub("%s+$", "")
+		end
+	end
+	return nil
+end
+
+local function project_dir(pane)
+	return repo_dir(pane) or pane_dirs(pane)[1]
 end
 
 local function truncate_utf8(s, max_chars)
@@ -133,9 +153,27 @@ config.keys = {
 		key = "r",
 		mods = "CMD|SHIFT",
 		action = wezterm.action_callback(function(window, pane)
-			local cwd = project_dir(pane)
+			-- Never launch the review outside Git: lumen would only report
+			-- "not a repository". Report in a tab, not a notification, which
+			-- macOS may be configured to swallow.
+			local cwd = repo_dir(pane)
 			if not cwd then
-				window:toast_notification("WezTerm", "Could not detect the current directory", nil, 3000)
+				local dirs = pane_dirs(pane)
+				local detected = #dirs > 0 and table.concat(dirs, "\n  ") or "（不明）"
+				window:perform_action(
+					act.SpawnCommandInNewTab({
+						args = {
+							"/bin/sh",
+							"-c",
+							'printf "%s\n" "$1"; printf "Enterで閉じます。"; read _',
+							"review",
+							"Gitリポジトリを検出できませんでした。\n試したディレクトリ:\n  "
+								.. detected
+								.. "\nccsessionで開いたセッションは exec zsh で開き直すと解決します。",
+						},
+					}),
+					pane
+				)
 				return
 			end
 
