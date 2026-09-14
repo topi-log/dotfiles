@@ -124,6 +124,7 @@ config.keys = {
 			choices = {
 				{ label = "Cmd+Shift+Space   現在のプロジェクトをVS Codeで開く" },
 				{ label = "Cmd+Shift+R       変更ファイルを全画面でレビュー" },
+				{ label = "Cmd+B             レビュー中のファイル一覧を開閉" },
 				{ label = "wlay diff          Git差分をテキストで開く" },
 				{ label = "Cmd+;             Claude Code セッション一覧（選択でペインへ移動）" },
 				{ label = "Cmd+W             現在のペインを閉じる" },

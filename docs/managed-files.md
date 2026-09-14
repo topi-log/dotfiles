@@ -12,7 +12,7 @@ chezmoi が配置するファイルと、あえて管理していないファイ
 | `~/.config/scripts/wlay` | symlink（`wezterm/wlay` を指す） |
 | `~/.config/scripts/cst` | 実ファイル（実行可能） |
 | `~/.config/scripts/denv` | 実ファイル（実行可能） |
-| `~/.local/bin/lumen-custom` | セットアップ時にビルド・更新 |
+| `~/.local/bin/lumen-custom` | apply 時にビルド（chezmoi の配置対象ではない） |
 | `~/.local/bin/lumen-review-shortcut` | 実ファイル（実行可能） |
 | `~/.config/scripts/install-lumen-custom` | 実ファイル（実行可能） |
 | `~/.config/lumen-bootstrap/` | 固定バージョン・カスタマイズ差分・ライセンス |
@@ -28,6 +28,16 @@ chezmoi が配置するファイルと、あえて管理していないファイ
 | `~/.claude/hooks/session-status.sh` | symlink |
 | `~/.claude/statusline.sh` | symlink |
 
+## apply 時に走るスクリプト
+
+`home/.chezmoiscripts/` に置いてある。配置されるファイルではなく、
+`chezmoi apply` のたびに実行される。
+
+| スクリプト | 実行タイミング |
+|---|---|
+| `run_after_install-fonts.sh` | 毎回。HackGen Console が無ければ導入するか聞く |
+| `run_onchange_after_install-lumen-custom.sh.tmpl` | lumen のパッチ・インストーラ・ショートカットのいずれかが変わったとき |
+
 ## symlink にならないファイル
 
 次のファイルは chezmoi の仕様により実ファイルとして書き出される。
@@ -39,6 +49,10 @@ chezmoi が配置するファイルと、あえて管理していないファイ
 | `~/.config/wezterm/wlay` | 実行可能属性が必要 |
 | `~/.config/scripts/cst` | 実行可能属性が必要 |
 | `~/.config/scripts/denv` | 実行可能属性が必要 |
+| `~/.config/scripts/install-lumen-custom` | 実行可能属性が必要 |
+| `~/.local/bin/lumen-review-shortcut` | 実行可能属性が必要 |
+
+`chezmoi managed --include=files` で実ファイルだけを一覧できる。
 
 `~/.claude/settings.json` は Claude Code 自身が書き換えるため、
 差分の扱いに注意が必要。[README の該当節](../README.md#settingsjson-だけ編集の向きが逆)を参照。

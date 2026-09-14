@@ -15,7 +15,7 @@ done
 unset _brew
 
 # --- PATH -----------------------------------------------------------------
-# 自前のスクリプト。~/.config/scripts は wlay（wezterm のオーバーレイペイン）用。
+# 自前のスクリプト。~/.config/scripts には wlay・cst・denv が入る。
 export PATH="$HOME/.local/bin:$HOME/.config/scripts:$PATH"
 
 # 以下はマシンによって導入状況が違うので、存在するときだけ PATH に足す。

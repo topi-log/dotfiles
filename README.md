@@ -21,7 +21,7 @@ macOS の設定ファイルを [chezmoi](https://www.chezmoi.io/) の symlink �
 ## セットアップ（新マシン）
 
 ```sh
-brew install chezmoi jq
+brew install chezmoi jq fzf
 git clone git@github.com:topi-log/dotfiles.git ~/workspace/dotfiles
 ```
 
@@ -57,6 +57,8 @@ chezmoi apply
 `~/.local/bin/lumen-custom` と `Cmd+Shift+R` のレビュー起動設定を導入する。
 不足しているRust、GitHub CLI、WezTermはHomebrewでインストールする。
 初回のビルドには数分かかる。実行時にRustは不要。
+WezTermが使うHackGen Consoleが無い場合は、その場で導入するか聞かれる
+（断ってもフォールバックフォントで動く）。
 
 lumen本体の固定コミットと、このリポジトリに同梱したカスタマイズ差分から
 構築するため、別途lumenのローカルリポジトリを用意する必要はない。
@@ -67,12 +69,8 @@ GitHubレビューの取得には別途 `gh auth login` が必要。
 常時ガイドの個別設定は各PCの `~/.config/lumen/review-shortcuts.json` に保存される。
 カスタマイズの更新方法は [lumenの導入・更新](docs/lumen.md) を参照。
 
-`wlay` と `denv` を使うには PATH に `~/.config/scripts` を追加する。
-リポジトリ側の `home/dot_zshrc` を編集して `chezmoi apply` する。
-
-```sh
-export PATH="$HOME/.config/scripts:$PATH"
-```
+`wlay`、`cst`、`denv` は `~/.config/scripts` に置かれる。このディレクトリは
+管理下の `~/.zprofile` が PATH に追加するので、追加の設定は要らない。
 
 ### chezmoi init を使わない理由
 

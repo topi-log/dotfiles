@@ -18,6 +18,7 @@ WezTerm terminal configuration for macOS.
 | `Cmd+/` | Show the shortcut list |
 | `Cmd+Shift+Space` | Open the current project in Visual Studio Code (Git root, or the current directory outside Git) |
 | `Cmd+Shift+R` | Review the current project's changes in a dedicated full-screen tab (Git repositories only) |
+| `Cmd+B` | Toggle the file sidebar in the review TUI (forwarded as F3) |
 | `Cmd+;` | List Claude Code sessions; pick one to jump to its pane |
 | `Cmd+W` | Close pane |
 | `Cmd+,` | Split vertically |
@@ -31,8 +32,10 @@ every `cd`, so WezTerm knows each pane's working directory. A pane can still
 report the wrong one: `ccsession resume` changes directory inside its own
 process before running `claude`, so the shell never reports that move, and
 WezTerm keeps the directory the pane started in. `Cmd+Shift+R` therefore takes
-the foreground process's directory first and the reported one second, and shows
-both in a notification rather than launching when neither is a Git repository.
+the foreground process's directory first and the reported one second. When
+neither is a Git repository it opens a tab listing both directories instead of
+launching the review -- a notification would be swallowed on a Mac configured
+to suppress them.
 
 To list what WezTerm has for every pane:
 
