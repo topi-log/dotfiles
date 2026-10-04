@@ -31,6 +31,7 @@ chezmoi が配置するファイルと、あえて管理していないファイ
 | `~/.claude/skills/spec-research/references/product-map.md` | symlink |
 | `~/.claude/skills/spec-research/assets/report-template.html` | symlink |
 | `~/.claude/skills/spec-research/scripts/search.sh` | 実ファイル（実行可能） |
+| `~/.claude/skills/bug-research/SKILL.md` | symlink |
 
 ## apply 時に走るスクリプト
 
