@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # プロダクトマップに登録したリポジトリの記録済みブランチを、checkout せずにまとめて git grep する。
-# usage: search.sh [-i] [-a] <pattern> [repo ...] [-- pathspec ...]
+# usage: search.sh [-i] [-a] [-m] <pattern> [repo ...] [-- pathspec ...]
 #   pattern は git grep -E の正規表現。repo を省略するとマップの全リポジトリを対象にする。
 #   -- の後ろは git grep の pathspec（例: -- '*.go'）。
 #   -i: 大文字小文字を無視する。-a: テスト・生成コード・ドキュメントの除外をやめる。
+#   -m: 文字列リテラルと代入の右辺を **** に置き換える（秘密情報を探すとき用）。
 #   SPEC_RESEARCH_MAP でマップのパスを上書きできる。SPEC_RESEARCH_MAX で1リポジトリあたりの最大行数を変えられる。
 set -euo pipefail
 
@@ -12,10 +13,12 @@ max="${SPEC_RESEARCH_MAX:-200}"
 
 grep_opts=(-n -I -E)
 use_default_excludes=1
+mask=0
 while [[ $# -gt 0 && "$1" == -* && "$1" != "--" ]]; do
   case "$1" in
     -i) grep_opts+=(-i) ;;
     -a) use_default_excludes=0 ;;
+    -m) mask=1 ;;
     *) echo "unknown option: $1（- で始まるパターンは [-]foo のように書く）" >&2; exit 2 ;;
   esac
   shift
@@ -59,5 +62,11 @@ awk -F'|' '
     ${pathspec[@]+"${pathspec[@]}"} "${excludes[@]}" 2>/dev/null || true)"
   [[ -n "$out" ]] || continue
   echo "## $repo (origin/${branch})"
-  printf '%s\n' "$out" | sed "s#^origin/${branch}:##" | head -n "$max"
+  out="$(printf '%s\n' "$out" | sed "s#^origin/${branch}:##")"
+  if [[ $mask -eq 1 ]]; then
+    out="$(printf '%s\n' "$out" | sed -E \
+      -e 's/"[^"]{4,}"/"****"/g' -e "s/'[^']{4,}'/'****'/g" -e 's/`[^`]{4,}`/`****`/g' \
+      -e 's/^([^:]+:[0-9]+:[[:space:]]*(export[[:space:]]+)?[A-Za-z0-9_.-]+[[:space:]]*[=:][[:space:]]*)[^[:space:]"'"'"'`]{4,}/\1****/')"
+  fi
+  printf '%s\n' "$out" | head -n "$max"
 done
