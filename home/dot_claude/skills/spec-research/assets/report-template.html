@@ -1,0 +1,138 @@
+<title>{{短いタイトル（2〜4語）}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;600;700&family=Noto+Sans+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f6f8fb;
+  --surface: #ffffff;
+  --fg: #1a2230;
+  --muted: #5a6577;
+  --line: #d8dee8;
+  --accent: #2557a7;
+  --accent-soft: #e6eefa;
+  --warn: #8a5a12;
+  --warn-soft: #fbf1df;
+  --font-body: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+  --font-mono: "Noto Sans Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --surface: #1a2029; --fg: #e3e8f0; --muted: #98a3b3; --line: #2e3644;
+    --accent: #7aa7ec; --accent-soft: #1c2a40; --warn: #e2b46a; --warn-soft: #2f2716;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161d; --surface: #1a2029; --fg: #e3e8f0; --muted: #98a3b3; --line: #2e3644;
+  --accent: #7aa7ec; --accent-soft: #1c2a40; --warn: #e2b46a; --warn-soft: #2f2716;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.75; margin: 0; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 36px; }
+/* 日本語の見出しが語の途中で折り返さないよう、文節単位で改行する */
+h1, h2 { word-break: auto-phrase; line-break: strict; }
+h1 { font-size: 1.6rem; font-weight: 700; line-height: 1.45; margin: 0; }
+h2 { font-size: 1.2rem; font-weight: 700; margin: 0 0 12px; }
+h3 { font-size: 1rem; margin: 18px 0 6px; }
+p { margin: 0 0 10px; max-width: 68ch; }
+.eyebrow { font-size: 0.75rem; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 6px; }
+.answer { background: var(--accent-soft); border-left: 4px solid var(--accent); padding: 16px 18px; border-radius: 4px; }
+.answer ul { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; }
+.tag { display: inline-block; font-size: 0.72rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; vertical-align: 1px; }
+.tag.ok { color: var(--accent); border-color: var(--accent); }
+.tag.guess { color: var(--warn); border-color: var(--warn); }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; background: var(--surface); font-size: 0.9rem; }
+th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: var(--accent-soft); font-weight: 600; }
+td.num { font-variant-numeric: tabular-nums; }
+dl.meta { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+dl.meta dt { color: var(--muted); }
+dl.meta dd { margin: 0; min-width: 0; }
+code { font-family: var(--font-mono); font-size: 0.85em; background: var(--accent-soft); padding: 0 4px; border-radius: 3px; overflow-wrap: anywhere; }
+.note { background: var(--warn-soft); padding: 14px 16px; border-radius: 4px; }
+.note ul, ul.plain { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 10px 14px; }
+summary { cursor: pointer; font-weight: 600; }
+summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+.ev { display: grid; gap: 14px; margin-top: 12px; }
+.ev pre { font-family: var(--font-mono); font-size: 0.8rem; background: var(--bg); border: 1px solid var(--line); padding: 10px; overflow-x: auto; margin: 4px 0 0; line-height: 1.5; }
+pre.mermaid { background: var(--surface); border: 1px solid var(--line); padding: 12px; overflow-x: auto; font-family: var(--font-body); }
+@media (max-width: 480px) { dl.meta { grid-template-columns: 1fr; } }
+</style>
+
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">仕様調査 / {{プロダクト名}}</div>
+  <h1>{{問いをそのまま見出しにする}}</h1>
+</header>
+
+<section>
+  <h2>結論</h2>
+  <div class="answer">
+    <ul>
+      <li>{{結論。末尾にラベル: <span class="tag ok">確認済み</span> / <span class="tag guess">推測</span> / <span class="tag">未確認</span>}}</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>前提</h2>
+  <dl class="meta">
+    <dt>質問者</dt><dd>{{例: モバイルエンジニア}}</dd>
+    <dt>問いの解釈</dt><dd>{{}}</dd>
+    <dt>調査範囲</dt><dd>{{対象にした領域と、対象外にした領域}}</dd>
+    <dt>読んだコード</dt><dd>{{リポジトリ@ブランチ（短縮ハッシュ、コミット日）}}</dd>
+  </dl>
+</section>
+
+<section>
+  <h2>{{詳細の見出し（値の流れ、条件ごとの結果など）}}</h2>
+  <!-- 流れ図や状態遷移図が要るときだけ使う -->
+  <pre class="mermaid">
+flowchart LR
+  A[入力] --> B[API] --> C[(DB)] --> D[表示]
+  </pre>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>{{}}</th><th>{{}}</th></tr></thead>
+      <tbody><tr><td>{{}}</td><td>{{}}</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>注意点</h2>
+  <div class="note">
+    <ul>
+      <li>{{意外な挙動、リポジトリ間の食い違い、不具合に見える挙動}}</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>未確認事項</h2>
+  <ul class="plain">
+    <li>{{確認内容}} — 確認先: {{人・チーム}}</li>
+  </ul>
+</section>
+
+<section>
+  <h2>根拠</h2>
+  <details>
+    <summary>エンジニア向け: コードの該当箇所</summary>
+    <div class="ev">
+      <div>
+        <h3>{{何の根拠か}}</h3>
+        <a href="{{https://github.com/<org>/<repo>/blob/<commit>/<path>#L10-L20}}">{{repo}}/{{path}} L10-20</a>
+        <pre>{{該当コードの抜粋}}</pre>
+      </div>
+    </div>
+  </details>
+</section>
+
+</div>
+

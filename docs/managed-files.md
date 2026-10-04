@@ -27,6 +27,10 @@ chezmoi が配置するファイルと、あえて管理していないファイ
 | `~/.claude/hooks/notify-when-quiet.sh` | symlink |
 | `~/.claude/hooks/session-status.sh` | symlink |
 | `~/.claude/statusline.sh` | symlink |
+| `~/.claude/skills/spec-research/SKILL.md` | symlink |
+| `~/.claude/skills/spec-research/references/product-map.md` | symlink |
+| `~/.claude/skills/spec-research/assets/report-template.html` | symlink |
+| `~/.claude/skills/spec-research/scripts/search.sh` | 実ファイル（実行可能） |
 
 ## apply 時に走るスクリプト
 
@@ -49,6 +53,7 @@ chezmoi が配置するファイルと、あえて管理していないファイ
 | `~/.config/wezterm/wlay` | 実行可能属性が必要 |
 | `~/.config/scripts/cst` | 実行可能属性が必要 |
 | `~/.config/scripts/denv` | 実行可能属性が必要 |
+| `~/.claude/skills/spec-research/scripts/search.sh` | 実行可能属性が必要 |
 | `~/.config/scripts/install-lumen-custom` | 実行可能属性が必要 |
 | `~/.local/bin/lumen-review-shortcut` | 実行可能属性が必要 |
 
@@ -59,6 +64,7 @@ chezmoi が配置するファイルと、あえて管理していないファイ
 
 ## 管理していないもの
 
+- `~/.claude/spec-research/products.md` — spec-research skill のプロダクトマップ。マシンごとに置く
 - `~/.config/gh/hosts.yml` — 認証トークンを含む
 - `~/.config/karabiner/automatic_backups/` — Karabiner-Elements の自動生成物
 - `~/.config/karabiner/assets/complex_modifications/1737014820.json` —
